@@ -11,8 +11,21 @@ services:
 
     working_dir: /workspace
 
+    environment:
+      DISPLAY: ${DISPLAY}
+      LD_LIBRARY_PATH: /usr/lib/wsl/lib
+      GALLIUM_DRIVER: d3d12
+      MESA_D3D12_DEFAULT_ADAPTER_NAME: NVIDIA
+
     volumes:
       - ..:/workspace
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /usr/lib/wsl:/usr/lib/wsl:ro
+
+    devices:
+      - /dev/dxg:/dev/dxg
+
+    gpus: all
 
     stdin_open: true
     tty: true
