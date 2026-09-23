@@ -149,13 +149,19 @@
 		<sensor name="dynamics" type="odometry" rate="30.0">
 			<link name="Vehicle"/>
 			<origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.0"/>
-		</sensor>
+		
+        <ros_publisher topic="/sim/odometry"/>
+        <ros_service set_enabled="/sim/dynamics/set_enabled"/>
+    </sensor>
 
 		<sensor name="pressure" type="pressure" rate="5.0">
 			<link name="Vehicle"/>
 			<origin rpy="0.0 0.0 0.0" xyz="-0.48 0.35 -0.4"/>
 			<noise pressure="5.0"/>
-		</sensor>
+		
+        <ros_publisher topic="/sim/pressure"/>
+        <ros_service set_enabled="/sim/pressure/set_enabled"/>
+    </sensor>
 
 		<sensor name="dvl" type="dvl" rate="20.0">
 			<history samples="1000"/>
@@ -165,31 +171,46 @@
 			<range velocity="9.0 9.0 9.0" altitude_min="0.5" altitude_max="81.0"/>
 			<water_layer minimum_layer_size="5.0" boundary_near="10.0" boundary_far="30.0"/>
 			<noise velocity="0.0015" altitude="0.001"/>
-		</sensor>
+		
+        <ros_publisher topic="/sim/dvl" altitude_topic="/sim/dvl/altitude"/>
+        <ros_service set_enabled="/sim/dvl/set_enabled"/>
+    </sensor>
 
 		<sensor name="acc" type="accelerometer" rate="100.0">
 			<history samples="1000"/>
 			<link name="Vehicle"/>
 			<origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.0"/>
-		</sensor>
+		
+        <ros_publisher topic="/sim/accelerometer"/>
+        <ros_service set_enabled="/sim/acc/set_enabled"/>
+    </sensor>
 -
 		<sensor name="imu_filter" type="imu" rate="20.0">
 			<history samples="1000"/>
 			<link name="Vehicle"/>
 			<origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.0"/>
-		</sensor>
+		
+        <ros_publisher topic="/sim/imu"/>
+        <ros_service set_enabled="/sim/imu_filter/set_enabled"/>
+    </sensor>
 
 		<sensor name="gps" type="gps" rate="1.0">
 			<link name="Vehicle"/>
 			<origin rpy="0.0 0.0 0.0" xyz="-0.54 -0.35 -0.74"/>
 			<noise ned_position="0.5"/>
-		</sensor>
+		
+        <ros_publisher topic="/sim/gps"/>
+        <ros_service set_enabled="/sim/gps/set_enabled"/>
+    </sensor>
 
 		<sensor name="proscilica" type="camera" rate="10.0">
 			<link name="Vehicle"/>
 			<origin rpy="0.0 0.0 1.571" xyz="0.5 -0.12 0.5"/>
 			<specs resolution_x="1360" resolution_y="1024" horizontal_fov="55.0"/>
-		</sensor>
+		
+        <ros_publisher topic="/sim/camera"/>
+        <ros_service set_enabled="/sim/proscilica/set_enabled"/>
+    </sensor>
 
 
         <sensor name="fls" type="fls" rate="2.0">
@@ -208,7 +229,10 @@
                 <noise
                         multiplicative="0.01"
                         additive="0.02"/>
-        </sensor>
+        
+        <ros_publisher topic="/sim/fls"/>
+        <ros_service set_enabled="/sim/fls/set_enabled"/>
+    </sensor>
 
 		<actuator name="ThrusterSurgePort" type="thruster">
 			<link name="Vehicle"/>
@@ -323,5 +347,9 @@
 		</light>
         
 		<world_transform rpy="0.0 0.0 0.0" xyz="$(arg robot_position)"/>
-	</robot>
+	
+    <ros_subscriber thrusters="/sim/thruster_setpoints"/>
+    <ros_publisher thrusters="/sim/thruster_state"/>
+
+</robot>
 </scenario>
