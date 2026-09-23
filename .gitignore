@@ -13,3 +13,4 @@ __pycache__/
 *.mcap
 
 .env
+external/
