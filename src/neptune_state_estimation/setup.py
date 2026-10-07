@@ -25,6 +25,9 @@ setup(
     entry_points={
         'console_scripts': [
             'ground_truth_state = neptune_state_estimation.ground_truth_state:main',
+            'pressure_depth = neptune_state_estimation.pressure_depth:main',
+            'hybrid_state = neptune_state_estimation.hybrid_state:main',
+            'dead_reckoning_state = neptune_state_estimation.dead_reckoning_state:main',
         ],
     },
 )

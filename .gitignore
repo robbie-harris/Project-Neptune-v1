@@ -14,3 +14,42 @@ __pycache__/
 
 .env
 external/
+
+# ============================================================
+# Project Neptune generated / local files
+# ============================================================
+
+# ROS / colcon
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# ROS bags / datasets
+*.db3
+*.mcap
+*.bag
+rosbag2_*/
+
+# Runtime logs
+*.log
+
+# External/generated dependencies.
+# Required Stonefish modifications belong in docker/stonefish_overrides/.
+external/

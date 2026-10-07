@@ -6,7 +6,7 @@
 
 	<environment>
 		<ned latitude="40.0" longitude="3.0"/>
-		
+
 		<ocean>
 			<water density="1000.0" jerlov="0.25"/>
 			<waves height="0.0"/>
@@ -19,7 +19,7 @@
 				<velocity xyz="1.0 1.0 0.0"/>
 			</current> -->
 		</ocean>
-		
+
 		<atmosphere>
 			<sun azimuth="120.0" elevation="50.0"/>
 		</atmosphere>
@@ -51,8 +51,13 @@
 		<look name="propeller" gray="1.0" roughness="0.3" texture="propeller_tex.png"/>
 		<look name="duct" gray="0.1" roughness="0.4" metalness="0.5"/>
 		<look name="dark" rgb="0.2 0.15 0.1" roughness="0.6" metalness="0.8"/>
-		<look name="pipe" rgb="1.0 0.2 0.0" roughness="0.2" metalness="0.3"/> 
-	</looks>
+		<look name="pipe" rgb="1.0 0.2 0.0" roughness="0.2" metalness="0.3"/>
+
+        <look name="neptune_home_red" rgb="1.0 0.15 0.15" roughness="0.3" metalness="0.0"/>
+        <look name="neptune_goal_yellow" rgb="1.0 0.9 0.1" roughness="0.3" metalness="0.0"/>
+        <look name="neptune_goal_blue" rgb="0.1 0.4 1.0" roughness="0.3" metalness="0.0"/>
+
+    </looks>
 
 	<static name="Bottom" type="plane">
 		<material name="Rock"/>
@@ -82,4 +87,61 @@
 			<body name="Buoy"/>
 		</second_end>
 	</cable>
+
+    <!-- NEPTUNE_DEBUG_MARKERS_START -->
+
+    <!-- HOME marker near start -->
+    <static name="HomePole" type="cylinder">
+            <dimensions radius="0.15" height="4.0"/>
+            <material name="Rock"/>
+            <look name="neptune_home_red"/>
+            <world_transform xyz="0.0 3.0 2.0" rpy="0.0 0.0 0.0"/>
+    </static>
+
+    <static name="HomeCrossBar" type="box">
+            <dimensions xyz="1.6 0.15 0.15"/>
+            <material name="Rock"/>
+            <look name="neptune_home_red"/>
+            <world_transform xyz="0.0 3.0 1.0" rpy="0.0 0.0 0.0"/>
+    </static>
+
+    <!-- Goal structure 10 m forward -->
+    <static name="GoalLeftPost" type="cylinder">
+            <dimensions radius="0.15" height="4.0"/>
+            <material name="Aluminium"/>
+            <look name="neptune_goal_yellow"/>
+            <world_transform xyz="-10.0 -1.0 2.0" rpy="0.0 0.0 0.0"/>
+    </static>
+
+    <static name="GoalRightPost" type="cylinder">
+            <dimensions radius="0.15" height="4.0"/>
+            <material name="Aluminium"/>
+            <look name="neptune_goal_yellow"/>
+            <world_transform xyz="-10.0 1.0 2.0" rpy="0.0 0.0 0.0"/>
+    </static>
+
+    <static name="GoalTopBar" type="box">
+            <dimensions xyz="0.15 2.3 0.15"/>
+            <material name="Aluminium"/>
+            <look name="neptune_goal_yellow"/>
+            <world_transform xyz="-10.0 0.0 0.5" rpy="0.0 0.0 0.0"/>
+    </static>
+
+    <static name="GoalBackboard" type="box">
+            <dimensions xyz="0.12 2.6 2.0"/>
+            <material name="Rock"/>
+            <look name="neptune_goal_blue"/>
+            <world_transform xyz="-11.0 0.0 2.2" rpy="0.0 0.0 0.0"/>
+    </static>
+
+    <!-- Extra mid-range marker -->
+    <static name="MidMarker" type="box">
+            <dimensions xyz="0.4 0.4 0.4"/>
+            <material name="Rock"/>
+            <look name="neptune_goal_blue"/>
+            <world_transform xyz="-5.0 0.0 2.5" rpy="0.0 0.0 0.0"/>
+    </static>
+
+    <!-- NEPTUNE_DEBUG_MARKERS_END -->
+
 </scenario>

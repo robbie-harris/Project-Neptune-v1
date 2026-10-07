@@ -1,12 +1,12 @@
 import rclpy
 from rclpy.node import Node
-
 from nav_msgs.msg import Odometry
 
 
 class GroundTruthState(Node):
 
     def __init__(self):
+        # INITIALIZE ROS NODE
         super().__init__('ground_truth_state')
 
         self.state_pub = self.create_publisher(

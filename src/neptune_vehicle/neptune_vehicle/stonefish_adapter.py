@@ -42,6 +42,7 @@ class StonefishVehicleAdapter(Node):
         surge: float,
         heave: float,
         sway: float,
+        yaw: float = 0.0,
     ):
         msg = Float64MultiArray()
 
@@ -52,10 +53,10 @@ class StonefishVehicleAdapter(Node):
         # 3 HeaveStern
         # 4 Sway
         msg.data = [
-            clamp(surge),
-            clamp(surge),
-            clamp(heave),
-            clamp(heave),
+            clamp(surge - yaw),
+            clamp(surge + yaw),
+            clamp(-heave),
+            clamp(-heave),
             clamp(sway),
         ]
 
@@ -68,6 +69,7 @@ class StonefishVehicleAdapter(Node):
             surge=msg.linear.x,
             heave=msg.linear.z,
             sway=msg.linear.y,
+            yaw=msg.angular.z,
         )
 
     def watchdog_callback(self):
@@ -79,7 +81,7 @@ class StonefishVehicleAdapter(Node):
         ).nanoseconds / 1e9
 
         if elapsed > self.watchdog_timeout:
-            self.publish_thrusters(0.0, 0.0, 0.0)
+            self.publish_thrusters(0.0, 0.0, 0.0, 0.0)
             self.last_command_time = None
 
 
