@@ -72,3 +72,9 @@ When assigned S2.1, implement ONLY S2.1.
 Do not begin S2.2, ESKF implementation, sensor-noise injection, or unrelated
 cleanup unless explicitly requested.
 After completing any S2.x task, update docs/PROJECT_HANDOFF.md with the implementation summary, validation results, limitations, and updated Stage 2 progress before stopping.
+Before returning the final response for any S2.x task, verify that
+docs/PROJECT_HANDOFF.md was actually modified and contains the task's
+implementation status, validation results, limitations, and Stage 2 progress.
+
+Do not declare an S2.x task complete if the handoff was not updated.
+Include docs/PROJECT_HANDOFF.md in the final changed-files report.

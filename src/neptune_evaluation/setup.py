@@ -8,7 +8,7 @@ setup(
     packages=find_packages(exclude=['test']),
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name, ['package.xml', 'README.md']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -18,6 +18,7 @@ setup(
     license='TODO: License declaration',
     extras_require={'test': ['pytest']},
     entry_points={'console_scripts': [
+        'dvl_benchmark = neptune_evaluation.dvl_benchmark:main',
         'localization_evaluator = neptune_evaluation.localization_evaluator:main',
     ]},
 )
