@@ -71,3 +71,4 @@ Each S2.x task is independent.
 When assigned S2.1, implement ONLY S2.1.
 Do not begin S2.2, ESKF implementation, sensor-noise injection, or unrelated
 cleanup unless explicitly requested.
+After completing any S2.x task, update docs/PROJECT_HANDOFF.md with the implementation summary, validation results, limitations, and updated Stage 2 progress before stopping.
