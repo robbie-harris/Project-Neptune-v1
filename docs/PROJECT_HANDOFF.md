@@ -732,3 +732,169 @@ Stage 2 progress: S2.1 evaluator implemented; S2.2 COMPLETE; S2.3 COMPLETE;
 experiments are assigned to future S2.13. `dead_reckoning_state.py` has no diff.
 No estimator, control, perception, Stonefish source, EKF or ESKF changes were
 made. No commit or push performed.
+
+
+# 18. S2.4 implementation record
+
+**S2.4 COMPLETE. S2.5 is NEXT; do not begin it until explicitly assigned.** Sections 16–17 and all prior work are preserved.
+This record supersedes section 17's historical “S2.4 next, not started” status.
+
+## Estimator / IMU dependencies
+
+Inspection of the unchanged `dead_reckoning_state.py` confirms that the full IMU
+orientation quaternion directly sets published orientation and rotates corrected
+DVL body velocity into world coordinates for x/y trapezoidal integration. IMU
+angular velocity does not propagate orientation, but all three rate axes affect
+DVL origin velocity via `v_origin = v_sensor - omega × r`, where
+`r = (-0.75, 0, 0.40)` m. Gyro imperfections therefore can affect position;
+for example +0.01 rad/s z-rate bias adds +0.0075 m/s body-y velocity error before
+rotation. Linear acceleration and IMU covariance fields are unused. Estimated z
+comes directly from pressure depth, with no direct IMU contribution. Orientation
+cases were selected because they directly stress both attitude output and the
+world-frame velocity rotation; this is not an inertial propagation experiment.
+
+## Tooling and exact experiment cases
+
+Added `scripts/run_s24_case.sh`, a lean adaptation of the S2.3 runner, and
+`docs/S2_4_IMU_VALIDATION.md` with usage, interpretation and limitations.
+Run one selected case with `./scripts/run_s24_case.sh <case>`:
+
+- `clean`: zero degradation; optional same-transport reference in addition to
+  the existing S2.3 clean evidence.
+- `orientation_noise`: independent Gaussian body-frame rotation-vector noise,
+  sigma **0.017453292519943295 rad (1 degree)** on each x/y/z axis per IMU message;
+  orientation bias zero.
+- `yaw_bias`: fixed body-z rotation-vector bias
+  **+0.03490658503988659 rad (2 degrees)**; orientation noise zero. This is
+  approximately yaw bias when level, not exact world-yaw bias at arbitrary tilt.
+
+S2.2 right-multiplies `q_out = q_in * delta_q`; seed **42**. All gyro,
+acceleration, DVL and pressure degradation parameters retain zero defaults.
+One-degree noise probes varying attitude/velocity rotation; two-degree bias
+probes persistent directional error (approximately 0.70 m over 20 m in a level
+open-loop straight-line approximation). These are engineering stress levels,
+not calibrated real-ocean IMU specifications or predictions of closed-loop error.
+
+Only estimator IMU is remapped: `/sim/imu:=/degraded/imu`. Raw `/sim/dvl` remains
+the estimator DVL input; raw `/sim/pressure` remains the pressure_depth input.
+The existing degrader also publishes unused DVL/pressure copies; those outputs
+are not routed into the onboard pipeline. `/state/odometry` remains canonical;
+`/sim/odometry` remains evaluation-only.
+
+The runner retains fresh Stonefish, exact installed-executable cleanup, respawn,
+sensors enabled after respawn, bounded health checks, process monitoring,
+cleanup traps, 430-second mission deadline, bounded eight-second evaluator SIGINT
+shutdown and 650-second outer backstop. It shares the existing S2.3 runner lock
+to serialize ownership of the same processes. Additional probes verify raw
+IMU/pressure and degraded IMU availability. Yaw metrics and accepted position
+pairs are required before successful completion. Unique container directories
+under `/tmp/neptune-s24-results` retain conditions, logs, mission outcome/reason
+and evaluator metrics. No sweep is implemented.
+
+Metrics use the unchanged S2.1 evaluator: horizontal/3D RMSE, maximum and final
+horizontal/3D errors, yaw RMSE in radians, plus accepted/rejected pair counts.
+Mission success/failure is recorded separately; MISSION TIMEOUT is failure.
+COMPLETE means mission logic completion, not independent physical HOME arrival.
+
+## Validation and live status
+
+- `bash -n scripts/run_s24_case.sh`: passed.
+- Three case mappings and IMU-only routing assertions: passed.
+- Invalid case: expected usage and exit code 2, without Docker startup.
+- ROS-sourced evaluation and simulation unit tests: **38 passed in 0.19 s**.
+- Python compileall of evaluation and simulation modules: passed.
+- Relevant `neptune_evaluation` colcon build: **1 package finished**, passed,
+  using isolated `/tmp/neptune-s24-{build,install,log}` outputs. The first build
+  invocation failed argument parsing because `--log-base` followed `build`;
+  correcting it to a global colcon option fixed the invocation.
+- Diff/whitespace checks: passed. Estimator source has no diff.
+
+The above checks were performed during tooling implementation. The operator has
+since supplied the completed `yaw_bias` mission recorded below. No additional
+mission, test or build was run during documentation finalization. Orientation
+noise and repeated IMU trials are deferred to S2.13.
+
+## Limitations / Stage 2 progress
+
+The operator-supplied yaw_bias result demonstrates one completed live mission;
+it does not establish reliability across all startup, interruption or failure
+paths. Existing installed Docker/ROS/Stonefish/workspace/S2.2/S2.3 overlays,
+Linux /proc and timeout/flock are assumed.
+S2.3 runner limitations remain applicable, including container-/tmp persistence,
+no automatic bag, initial translation alignment and timing-dependent accepted
+pairs. Final error is the last accepted pair; yaw retains fixed attitude bias.
+Per-sample orientation noise is not temporally correlated inertial drift.
+One seeded run per case cannot establish statistical reliability, and fixed-seed
+repeatability requires identical ordered inputs and runtime.
+
+Stage 2 progress: S2.1 evaluator implemented; S2.2 COMPLETE; S2.3 COMPLETE;
+**S2.4 COMPLETE; S2.5 NEXT, not started**.
+S2.6–S2.14 remain not started. No estimator algorithm, pressure_depth, autonomy,
+controls, Stonefish source or perception changes. S2.5, EKF and ESKF were not
+started. No commit or push performed.
+
+## S2.4 startup retry correction
+
+The operator's first live attempt launched fresh Stonefish but failed before
+mission start on `/sim/dynamics/set_enabled` timing out. No mission metrics are
+claimed from that attempt. `scripts/run_s24_case.sh` now uses a shared 120-second
+budget for discovery, respawn and enabling. It waits for `/respawn_robot` and all
+four set_enabled services, then retries respawn first, followed in order by
+dynamics, pressure, IMU filter and DVL. Each call attempt is bounded to eight
+seconds plus a two-second kill deadline (shortened near the shared deadline),
+with a one-second retry delay. Only a successful command with an explicit positive
+service success response advances to the next service. Waiting/retry messages
+identify the service; attempt exit codes and responses are retained in services.log.
+Simulator exit still fails immediately; cleanup traps and all later bounds remain.
+
+Validation for this correction: bash syntax and static ordering, timeout, cleanup
+and whitespace checks passed. No simulator, startup smoke or mission was run.
+At the time of that correction, live responsiveness remained pending. The
+subsequent operator-supplied completed yaw_bias result is recorded below;
+S2.4 is now COMPLETE and S2.5 remains NEXT, not started.
+Estimator code was not modified; no EKF/ESKF work, commit or push.
+
+## S2.4 completed live result
+
+**S2.4 COMPLETE. Mission: COMPLETE. S2.5: NEXT, not started.**
+
+Operator-supplied live evidence: case `yaw_bias`, fixed IMU body-z orientation
+bias **+2 degrees (+0.03490658503988659 rad)**, seed **42**. DVL and pressure
+remained raw. Only IMU was routed through the degraded stream:
+`/sim/imu -> sensor_degrader -> /degraded/imu -> dead_reckoning_state`.
+Orientation noise, gyro and acceleration degradation remained zero.
+
+| Metric | Exact live value |
+| --- | --- |
+| sample_count | 7185 |
+| horizontal_error | 0.012065409590277545 m |
+| position_3d_error | 0.016093726452512957 m |
+| z_error | 0.010650536256318455 m |
+| horizontal_rmse | 0.4430772621576315 m |
+| position_3d_rmse | 0.4435698295205001 m |
+| depth_rmse | 0.020898167856143065 m |
+| max_horizontal_error | 0.634368360456643 m |
+| max_3d_error | 0.6357113629012187 m |
+| final_horizontal_error | 0.012065409590277545 m |
+| final_3d_error | 0.016093726452512957 m |
+| yaw_error | 0.03492110364428225 rad |
+| yaw_rmse | 0.03497433930756844 rad |
+| rejected pairs | 0 |
+| Mission | COMPLETE |
+
+The +2 degree bias produced approximately 2 degree yaw RMSE, as expected.
+The current dead-reckoning estimator directly uses the IMU orientation quaternion
+to rotate DVL body-frame velocity into world coordinates. The orientation bias
+therefore produced substantial horizontal trajectory error: approximately
+0.443 m horizontal RMSE. The mission still completed successfully.
+
+The small final position error does not mean the trajectory was accurate or
+erase the large trajectory RMSE. Error accumulated differently over mission
+segments and partially cancelled by the end.
+
+This is single-run engineering evidence only, not a statistical reliability
+estimate or calibrated real-ocean IMU performance claim. `orientation_noise` and
+repeated IMU trials are deferred to **S2.13**; they are not required to complete
+this lean S2.4 task. The existing S2.3 clean result remains historical reference
+evidence. No additional mission, test or build was run during this documentation
+finalization. S2.5 was not started; no commit or push occurred.
