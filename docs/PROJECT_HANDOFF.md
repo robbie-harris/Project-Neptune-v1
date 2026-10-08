@@ -580,3 +580,155 @@ Do not optimize metrics by changing the evaluation conditions.
 Do not use simulator truth to improve live estimator output.
 
 Ground truth exists only to tell us how wrong the onboard estimator is.
+
+
+# 16. S2.2 completion record
+
+Sensor degradation infrastructure implemented under `neptune_sim`, with fixed
+seeds, copied messages, configurable perturbations, dropout, and ROS remapping.
+23 unit tests passed. The preceding-session validation reported by the operator
+validated the real Stonefish DVL message path and live +0.5 m/s DVL x-bias
+injection. `/sim/odometry` remained evaluation-only. No EKF/ESKF work started.
+This appended record preserves the prior history; live checks were not rerun
+as part of S2.3.
+
+
+# 17. S2.3 completion record
+
+**S2.3 COMPLETE. S2.4 is next; do not begin it automatically.** S2.2 completion
+in section 16 is preserved. The historical S2.1 task specification above remains
+as development history, not the current task assignment.
+
+S2.3 tooling comprises the `neptune_evaluation/dvl_benchmark.py` case preparer,
+console registration and focused tests, optional evaluator `result_path` JSON
+export, and `scripts/run_s23_case.sh` one-command live runner. Metric semantics,
+estimator algorithm and mission/control behavior are unchanged. `/state/odometry`
+remains canonical and `/sim/odometry` remains evaluation-only.
+
+## Valid live evidence supplied by the operator
+
+All positions/errors are metres. Noise is independent Gaussian noise on each
+original DVL sensor x/y/z axis; seed 42. IMU and pressure remain raw. These are
+three single live Stonefish runs, not statistically robust performance estimates.
+No additional live mission was run during finalization.
+
+| Metric | clean | noise_low (sigma 0.005 m/s) | noise_medium (sigma 0.020 m/s) |
+| --- | --- | --- | --- |
+| Horizontal RMSE | 0.06335722984330514 | 0.027414205798626322 | 0.09459194865242691 |
+| 3D RMSE | 0.0664469991790655 | 0.03248775363551141 | 0.09597260628137308 |
+| Depth RMSE | 0.020026610459220346 | 0.017433171160527203 | 0.016220493413459828 |
+| Max horizontal error | 0.4224227192485452 | 0.3886168188233103 | 0.45570213376659047 |
+| Max 3D error | 0.42404024159633374 | 0.3904905524168533 | 0.45711741908011977 |
+| Final horizontal error | 0.048055024002437496 | 0.005267976601610907 | 0.13869381418106502 |
+| Final 3D error | 0.04809153619810318 | 0.005270125609599091 | 0.13869442720587985 |
+| Rejected evaluator pairs | 0 | 0 | 3 |
+| Mission | COMPLETE | COMPLETE | COMPLETE |
+
+Medium noise demonstrates materially worse trajectory accuracy than low noise
+while the mission still completes. A single clean run need not numerically
+outperform every noisy run: live Stonefish/DDS timing, input ordering, initial
+alignment and closed-loop trajectories vary. These are engineering evidence,
+not real-ocean accuracy or statistical reliability claims. Rejected evaluator
+pairs are invalid/repeated messages or skew discards, not lost DVL packets.
+
+## Runner architecture and fixes
+
+Run exactly one selected case from the repository root:
+
+    ./scripts/run_s23_case.sh <case>
+
+The host invokes the existing Docker dev service. Inside, a nonblocking `flock`
+serializes experiments. Existing installed ROS/Stonefish/S2.2/S2.3 overlays are
+required. The runner resolves package executable paths and launches executables
+directly, avoiding `ros2 run` launcher PID ambiguity. A Python exec shim restores
+SIGINT handling inherited as ignored from Bash background jobs.
+
+Prior nodes and the actual Stonefish executable are identified by exact
+NUL-delimited `/proc` argv executable paths (argv[0], or Python argv[1]); process
+start-time identity is rechecked before signaling. No broad pkill/regex matches
+or shell command substrings are used. Old instances receive bounded TERM/KILL
+cleanup before a fresh simulator is launched with the verified scenario:
+`/workspace/external/stonefish/Tests/Data/02_port_pipe_mission.scn` and data root
+`/workspace/external/stonefish/Tests/Data`, arguments `100 800 600 low`.
+
+Service discovery is bounded at 40 seconds; each discovery command, service
+call, and topic probe has its own timeout and kill deadline. GIRONA500 respawns
+at (0,0,0), identity orientation, then dynamics, pressure, IMU filter and DVL
+are enabled AFTER respawn. Service rejection fails the case. `/sim/odometry`
+and `/sim/dvl` must each produce a message within eight seconds, or the runner
+aborts with a clear reason.
+
+Launch order: sensor_degrader, stonefish_adapter, pressure_depth,
+dead_reckoning_state (ONLY `/sim/dvl:=/degraded/dvl` remapped), evaluator, mission.
+All experiment processes are monitored for early exit. The literal
+`========== COMPLETE ==========` mission log event ends the experiment;
+`MISSION TIMEOUT` is failure even though mission logic also enters COMPLETE.
+A 430-second wall mission deadline prevents indefinite waiting.
+
+Evaluator shutdown targets its actual PID with SIGINT and polls for at most
+eight seconds, then escalates to TERM (two seconds) and KILL. No unbounded Bash
+`wait` is used for evaluator shutdown; forced shutdown is reported as failure.
+Metrics must exist as valid JSON with accepted pairs before success is reported.
+EXIT/INT/TERM traps shut down experiment nodes, including Stonefish, with bounded
+cleanup. Host interruption signals only the exact inner runner argv. A 650-second
+whole-run timeout plus 40-second kill deadline provides an outer backstop.
+
+Each case gets a unique `/tmp/neptune-s23-results/<case>.<suffix>` directory in
+the container; no previous results are deleted. Logs, health probes, conditions,
+mission status, outcome reason and metrics are retained. Completion prints case,
+status, metrics path, result directory and a failure reason when unsuccessful.
+All seven existing cases remain selectable; there is no automatic sweep.
+
+## Finalization validation (quick checks only)
+
+- `bash -n scripts/run_s23_case.sh`: passed.
+- Exact process matcher helper: actual dummy Python executable stopped; a shell
+  merely containing its path was preserved. Passed; self-matching review passed.
+- Shutdown helpers: graceful SIGINT passed; ignored SIGINT forced termination
+  completed within five seconds; nonexistent PID returned immediately. Passed.
+- Actual installed evaluator using the runner exec shim on isolated input topics:
+  SIGINT stopped it within the three-second test bound and wrote valid metrics
+  JSON with zero pairs, as expected without sensor input. Passed; no simulator
+  or mission was started.
+- Seven case parameter mappings and invalid-case exit code 2: passed.
+- ROS-sourced evaluation/degradation pytest: **38 passed in 0.18 s**.
+- Python compileall of evaluation and simulation Python modules: passed.
+- Selected `neptune_evaluation` colcon build: **1 package finished**, passed.
+- `git diff --check`: passed.
+
+Initial host and container pytest collection attempts failed with missing
+`nav_msgs`/`sensor_msgs`: the test invocation replaced rather than extended
+PYTHONPATH. Preserving the sourced ROS PYTHONPATH fixed the invocation; all
+38 tests then passed. Prior combined evaluation/sim build failure on missing
+generated Stonefish `package.sh` and successful packaging-only sim build are
+historical validation; no new simulator-package change was made here.
+
+## Limitations and deferred work
+
+Runner changes are statically reviewed and helper-tested; the revised complete
+Docker/Stonefish startup, service-response formatting, interruption propagation,
+mission monitoring and evaluator flush under live mission load remain to be exercised in a future
+live run. No startup smoke or long mission was run during finalization. The
+existing overlays, Docker access, Linux `/proc`, GNU timeout/flock, and verified
+scenario installation are assumed. Cleanup matches the resolved installed
+executable paths; unrelated installations/controllers are outside its ownership.
+SIGKILL or loss of the container/host cannot guarantee traps or final metrics.
+Results live in container /tmp; copy them out before replacing the container.
+No bag or full provenance manifest is automatically recorded by this runner;
+conditions and logs are retained, and the historical preparer remains available
+for additional provenance. Fixed seed reproducibility needs identical ordered
+inputs and Python runtime. Evaluator alignment, pair skew and equally weighted
+accepted-pair semantics remain S2.1 behavior; final error is the last accepted
+pair. COMPLETE is mission logic completion, not proof of physical HOME arrival.
+
+Deferred to **S2.13**: `noise_high` (0.05 m/s/axis), `bias_small` (+0.01 m/s sensor-x),
+`dropout_mild` (0.10), `dropout_strong` (0.40), and repeated/randomized trials.
+No results are claimed for these cases. These are engineering stress settings,
+not calibrated sensor specifications; random dropout is not sustained bottom-lock
+loss. Repeated trials belong in S2.13.
+
+Stage 2 progress: S2.1 evaluator implemented; S2.2 COMPLETE; S2.3 COMPLETE;
+**S2.4 next, not started**. S2.5 and S2.6–S2.14 are not started; the above stress
+experiments are assigned to future S2.13. `dead_reckoning_state.py` has no diff.
+No estimator, control, perception, Stonefish source, EKF or ESKF changes were
+made. No commit or push performed.

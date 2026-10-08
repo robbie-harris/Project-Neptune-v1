@@ -8,6 +8,7 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 
+from neptune_evaluation.dvl_benchmark import write_result
 from neptune_evaluation.localization_metrics import LocalizationMetrics, quaternion_yaw
 
 
@@ -16,6 +17,8 @@ class LocalizationEvaluator(Node):
 
     def __init__(self):
         super().__init__('localization_evaluator')
+        self.declare_parameter('result_path', '')
+        self.result_path = self.get_parameter('result_path').value
         self.declare_parameter('diagnostic_period', 5.0)
         self.declare_parameter('max_pair_skew', 0.1)
         period = float(self.get_parameter('diagnostic_period').value)
@@ -102,6 +105,8 @@ def main(args=None):
     finally:
         if node is not None:
             node.print_diagnostics(final=True)
+            if node.result_path:
+                write_result(node.result_path, node.metrics.summary(), node.rejected)
             node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
