@@ -1,0 +1,485 @@
+{
+  "release": "Last deployed pipe-only tank overview build",
+  "source_container": "neptune-source-inspection",
+  "deployment_manifest": "sha256:804cf60d8ec8c95b55ec148e60b69569542ee88744adc75cbec24cfc8da28134",
+  "source": "outputs/docker-tank-overview-final-build.log matched retained container image",
+  "recovered_files": [
+    {
+      "path": "src/neptune_perception/package.xml",
+      "sha256": "87d5c3bfa8dccdfeb91286e1e35e4a36e2579a4becc3b7e780e5dc0524ad05af"
+    },
+    {
+      "path": "src/neptune_perception/setup.py",
+      "sha256": "ebeab79681c029cd286ee0b056154319cdbfc394e523733964991f315c6019cf"
+    },
+    {
+      "path": "src/neptune_perception/setup.cfg",
+      "sha256": "0bcff9d0362284b70a66780a7b5de55f7c5902efac6e5a5bb876c37527fa75cc"
+    },
+    {
+      "path": "src/tools/container-entrypoint.sh",
+      "sha256": "742ce320eeddc0bce97fff40aeb258a1b3c6a9f7e4bf0ec40c723001dd46622e"
+    },
+    {
+      "path": "src/tools/quarantine_captures.py",
+      "sha256": "49c47e2e5aa18ac5ae38c90023bf3afc5e79ab06ff8c2891e2cb0c05fdab5d3f"
+    },
+    {
+      "path": "src/tools/inference-smoke.py",
+      "sha256": "a34fac6fa09840cd9d4695dbe8de509c8a67dc5ab843704c8801ec7ae38c3270"
+    },
+    {
+      "path": "src/tools/summarize_repeats.py",
+      "sha256": "4113fe6edbcc44deb3b80b291b74bdceb9e2276941ea584f55c001c34191e921"
+    },
+    {
+      "path": "src/tools/capture_dataset.py",
+      "sha256": "610eeea4b4997a5fbed62652ba0d859bcfa6dd0acd95ad16594a1aeb0b7bed39"
+    },
+    {
+      "path": "src/tools/inference-server.sh",
+      "sha256": "d2841bb117c2991c1619575986e79dfea7e5437d589174e134ad1d5664698eac"
+    },
+    {
+      "path": "src/tools/verify_gui_controls.py",
+      "sha256": "6758d26911e86646e5e7f8330961c788f3015b295752512a08cdb8854315355a"
+    },
+    {
+      "path": "src/tools/validate_dataset.py",
+      "sha256": "4e538d69c72af9a08f6b88fe3ff14a0b97198b3ddc10ff997364b702825af172"
+    },
+    {
+      "path": "src/tools/verify_operator_features.py",
+      "sha256": "19b2744c18c6d38f70dfefedaa478fe68256f4827d98258cf7b50657e83fd31f"
+    },
+    {
+      "path": "src/tools/verify_roboflow_export.py",
+      "sha256": "157306c1efeb7304c2bdeb49b626c7d5c1b6e6eeb3f5daf700d6a444c6e26bc5"
+    },
+    {
+      "path": "src/tools/verify_runtime.py",
+      "sha256": "263b5102a8f13fdaa610dfa862ebc3ed40dd424a2120729f9825c395e23088a0"
+    },
+    {
+      "path": "src/tools/review_labels.py",
+      "sha256": "375faa96072b91aa4f0aad6df2201389cdade7ff1394012a765fa1e80c3097aa"
+    },
+    {
+      "path": "src/tools/import_cou.py",
+      "sha256": "d03d90289128d51ccc058b2f2255d3965a016f5590ae7cc5be9583e851e0db9c"
+    },
+    {
+      "path": "src/tools/roboflow_transfer.py",
+      "sha256": "0a25fdc6a519f8b849caf9c0b1681e5bc5b8248c86d7a0f8625cc281b5b89b19"
+    },
+    {
+      "path": "src/tools/gui.sh",
+      "sha256": "e8b62b4c31d6a3525a98bc0cc383e14e08ff72625f4523cc0b913f25071a978f"
+    },
+    {
+      "path": "src/tools/run.sh",
+      "sha256": "9d22ba8b34f63429376f69f41be6afcc79848a0d605f9cac0eb3f505c6d0fecb"
+    },
+    {
+      "path": "src/tools/start-vnc.sh",
+      "sha256": "00c872bd0c2eddb53c120b9eb2d845fa2d5450eef270911063c6c67647cdd5f3"
+    },
+    {
+      "path": "src/tools/roboflow_bulk.py",
+      "sha256": "f061a36e3a369855f75bfd815d7dbcdde44feba1f67abb7684c47e6011ace172"
+    },
+    {
+      "path": "src/tools/patch_stonefish.py",
+      "sha256": "32614d25af6732b03bf371fd01218fe2aec04b2e0f91063450fff16312355cdb"
+    },
+    {
+      "path": "src/tools/promote_model.py",
+      "sha256": "8d8217375c40566c0a9ddd8c555d407013c884962116691b2296f57681605a0b"
+    },
+    {
+      "path": "src/tools/geometry.py",
+      "sha256": "37de169139a196d4345070142e2bc2507d0248386b66724c15a04cd1ae311281"
+    },
+    {
+      "path": "src/tools/train.py",
+      "sha256": "6f2b104eb9d7f3005a36d2a763cf0b04c4ae95c2e3952780bb1ded68e4d8fed8"
+    },
+    {
+      "path": "src/tools/evaluate.py",
+      "sha256": "01cc6c4f42e6c553060d918aafabc1731c90ff47a09d4053a0a999b0acdd5b50"
+    },
+    {
+      "path": "src/tools/verify_controls.py",
+      "sha256": "821cb20ba0974b8adf656dd66e98f586f3952540ac98052c3b9c84d9e91bb33c"
+    },
+    {
+      "path": "src/tools/capture_orientation.py",
+      "sha256": "8494db41f760ebdd6a30a2399745be907059ad2921a222cd1b7338cddce4ccf0"
+    },
+    {
+      "path": "src/tools/make_comparison.py",
+      "sha256": "7a7b7ff750254ec92c92427c41be7b2a47c92d5b5f75e5579f4355711c535cfb"
+    },
+    {
+      "path": "src/tools/roboflow_annotations.py",
+      "sha256": "282459a0f44f2e2f176264ab91220c2b0fb44351636ce0ae3d2f1978295c6a70"
+    },
+    {
+      "path": "src/tools/orientation_views.py",
+      "sha256": "3c076487ee6c46c74dd4d719f4e85e22a261f4183a8ca3e095f1d3b25e393b18"
+    },
+    {
+      "path": "src/tools/evaluate_roboflow_runs.py",
+      "sha256": "79454c18e76c40aad210cf3acf9606a8fd18977c39330f32831ff33d47d3d52d"
+    },
+    {
+      "path": "src/tools/roboflow_checkpoint.py",
+      "sha256": "d89f86bfaba42a6f6637d17423083babc0003bae59d3e43459447b559bfa0ead"
+    },
+    {
+      "path": "src/tools/run-roboflow.sh",
+      "sha256": "d48b180a830c9029142d840a30d0e2f94ac9c2e459398370d410a9ff69f3139a"
+    },
+    {
+      "path": "src/tools/roboflow_weights.py",
+      "sha256": "b7e0ad75f7e3b54c41df5dad9721e0944e48cf85c43994ceca4471c7776c5b59"
+    },
+    {
+      "path": "src/tools/check_managed_deployment.py",
+      "sha256": "841648eea68f1862698ee13b3ae13e6bc357809c72cced2c144a0cd0a3b8a2fb"
+    },
+    {
+      "path": "src/neptune_gui/controls.py",
+      "sha256": "6a685cc1c470fe53c0fd32c3b8155aca950ffefc56b9db9360e4d62c902f366e"
+    },
+    {
+      "path": "src/neptune_gui/auv_gui.py",
+      "sha256": "54eeef45fd6f7f0d7514ade100f96a1b055a9ecfe640f94fb368fb8329e7cd06"
+    },
+    {
+      "path": "src/neptune_sim/package.xml",
+      "sha256": "9e58b63aa93c7b54bbc9b1e669f53c6fe8179c42beaae56883ae2687ec6c905e"
+    },
+    {
+      "path": "src/neptune_sim/setup.py",
+      "sha256": "61a203cf7501c7d796609e11b5f3d3edb66e5ecc1f0713abd49a90368afd94d9"
+    },
+    {
+      "path": "src/neptune_sim/setup.cfg",
+      "sha256": "294c1c50b3da6439439d13fc49014bbaac937f25ded518ad5be5bd8d6eecc65f"
+    },
+    {
+      "path": "src/neptune_perception/neptune_perception/detector.py",
+      "sha256": "6ed424d60abf36ced79e32d8bc209b6b47c9b54c3c581d20c42e6e16ffd81b11"
+    },
+    {
+      "path": "src/neptune_perception/neptune_perception/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/neptune_perception/neptune_perception/backends.py",
+      "sha256": "f3e0a4b4a27a6744940aaeb3d27e640e9bcf44c28d93e588004a6fa31d91175d"
+    },
+    {
+      "path": "src/neptune_perception/resource/neptune_perception",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/neptune_sim/launch/pipe_tank.launch.py",
+      "sha256": "c50e83b47e992828c10489dba196663d5374949be9dfe82d864ae15552661128"
+    },
+    {
+      "path": "src/neptune_sim/resource/neptune_sim",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/neptune_sim/neptune_sim/error_model.py",
+      "sha256": "e55c6217a7a11ff3bf65261b14422afaab70a1bfd73eccb91b415b5e84396da3"
+    },
+    {
+      "path": "src/neptune_sim/neptune_sim/protocol.py",
+      "sha256": "b8d8d65f20f87ce019a0c347fc86a6db73fec829e4c5ff00379a61fcb495615b"
+    },
+    {
+      "path": "src/neptune_sim/neptune_sim/bridge.py",
+      "sha256": "8f33fbcd02204cb6b08818ab54133238e7843d5dc5ebeacd10fd8795c1d7767c"
+    },
+    {
+      "path": "src/neptune_sim/neptune_sim/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/neptune_sim/neptune_sim/error_adapter.py",
+      "sha256": "2b96497f44a912a3ed16b0ce04506fae147c8f81beca9ce61848cc468b2d2ba4"
+    },
+    {
+      "path": "src/neptune_sim/neptune_sim/rig_adapter.py",
+      "sha256": "2b73bd5525a446b96886412f4b0df8154f3dcb8a2a215e05da6f6b52ae7e4a53"
+    },
+    {
+      "path": "src/neptune_sim/neptune_sim/navigation.py",
+      "sha256": "f0cf207925260ace7d7266df35dafe118db338088389437bb2560a09b638a59e"
+    },
+    {
+      "path": "src/neptune_sim/neptune_sim/operator_state.py",
+      "sha256": "c984d4c8e49e03cae2eca619488a4441618b37221304b22d5d4204877b3168a4"
+    },
+    {
+      "path": "Simulation/docker/inference-image.txt",
+      "sha256": "883a198489ae42090ab6b2e29518ac2f344b3184fdf3a6e4e511d16970330f7b"
+    },
+    {
+      "path": "Simulation/docker/Dockerfile",
+      "sha256": "64f3b22c22fc7e3aa78cd0168819596a93a18d2ee150f4c3121ac75ab5b086f7"
+    },
+    {
+      "path": "Simulation/docker/inference.env",
+      "sha256": "ac46e5f4b4751203345641fcf101cfec586ccb7c928c049b492af33e82fc4017"
+    },
+    {
+      "path": "Simulation/config/rig.json",
+      "sha256": "3001c94a7a58d16066f86c575998d3307ca53fd1102146e13685222da3c4c8e3"
+    },
+    {
+      "path": "Simulation/config/errors.json",
+      "sha256": "e3be9bf081b6524456117d1a8ebaa77b792d89055e553d6d484c3faf1bad0f28"
+    },
+    {
+      "path": "Simulation/scenarios/pipe_tank.scn",
+      "sha256": "62b75c3b50c5fcf3c5362a335d5b2633df3c5f0fa8c8ed0a44e9e184a907b71f"
+    },
+    {
+      "path": "Simulation/assets/propeller.obj",
+      "sha256": "bf7b25b0437357cd3172980d0b84ac2d06abc5b5936f9ba79f40f562f9ab711c"
+    },
+    {
+      "path": "config/training.yaml",
+      "sha256": "f51b32321c4af15da0a79fadddb42f975605d10470ee1975fa0355ca4f589699"
+    },
+    {
+      "path": "config/requirements.txt",
+      "sha256": "b83b495c95a2d690ea33de329809a0fdeb04ce7e8c34fbb9012dabe5233f12c7"
+    },
+    {
+      "path": "config/inference-client-requirements.lock.txt",
+      "sha256": "a29cea5ab1958ad5eee7f3f6754266223d985483cba32560f906d3697d9ccc3f"
+    },
+    {
+      "path": "config/requirements-host.lock.txt",
+      "sha256": "f99fc5c0a81d56dee4e19978ed1d8de4ae8c10e11d27ff431cc8a65f9d1d1376"
+    },
+    {
+      "path": "config/detector.yaml",
+      "sha256": "0651bd4b2375741b942bc8b6a63cbad9998346ad54e1a96baa5571a4b9a74b33"
+    },
+    {
+      "path": "config/roboflow-client-requirements.txt",
+      "sha256": "847a7eae5c5fd0e204ac316545d67648e30e5ceae2eef5886a9c6d15e3eaf213"
+    },
+    {
+      "path": "docs/Implementation Plan.md",
+      "sha256": "4463fd14f6b2981ed749e4f5df689a270b8157284937346dcb7c23dd04649e7c"
+    },
+    {
+      "path": "docs/Architecture.md",
+      "sha256": "460be620b84b9444a64d669117c7117aba829da9a6192b9c8195d699749cb867"
+    },
+    {
+      "path": "docs/Ideas.md",
+      "sha256": "75bee20556536a7b386aeeab7f78f19612baa886025cf92f155cec5e92b206b8"
+    },
+    {
+      "path": "docs/Experiments.md",
+      "sha256": "9345d0def77ccf837abc4c061af01d4c05a0c5bc0ccea88365fcc4007da998b8"
+    },
+    {
+      "path": "docs/Setup.md",
+      "sha256": "c2aa5e5bfa19bfa37e152f340a76c7a32d27c97c8adfe0a1ebb5b24ca575ffcc"
+    },
+    {
+      "path": "docs/Roboflow Training.md",
+      "sha256": "94b483f447eeb1135104f7eba284135dcc8657c6d4459c2725a6102ee6658236"
+    },
+    {
+      "path": "docs/Orientation Deployment Results.md",
+      "sha256": "dbbad5705a8d0f23f93b85bd984756f5827f00a527fe1adf132fb3d106c7dd17"
+    },
+    {
+      "path": "docs/Methods and Libraries.md",
+      "sha256": "ea44ceef517464bb4765fd7c6c40db5366df2f22bbe12595b5bbfa6b5aaab7e1"
+    },
+    {
+      "path": "docs/Tank Overview.md",
+      "sha256": "c31ddd1327e89b73704c6a33ba7b9051e42a0469890a688b9c778ad8fe3dde60"
+    },
+    {
+      "path": "docs/Progress.md",
+      "sha256": "1ca3f9e4ba6bdbe6ccad2034c1fc520f1694f422f20eff4ca71e1cdfe5bd228c"
+    },
+    {
+      "path": "docs/Sensor Errors and Return to Spawn.md",
+      "sha256": "ddc563c25578ecd85a205ba617d970d34701c08ab2cc909719ebab0a21dbf462"
+    },
+    {
+      "path": "docs/Home.md",
+      "sha256": "abc8a7f99bbff6352830d82e29b45caadfcccc7e82d5ce457a0f813a829ea07d"
+    },
+    {
+      "path": "docs/Decision Log.md",
+      "sha256": "514ac23dae4438ee9be4d6e72aa913eee58aa2cedc254d551981a71116886978"
+    },
+    {
+      "path": "docs/Research.md",
+      "sha256": "12793346e8c335881b7440b684147cbf63195c128647416980d4a3cefea3e796"
+    },
+    {
+      "path": "docs/Orientation Detection.md",
+      "sha256": "f78e2cb9b2eb19724b3b1e1c906cbf326d3f1a848f4caa38da59113b874821c3"
+    },
+    {
+      "path": "docs/Project Overview.md",
+      "sha256": "5ee51cacbc7a9755353e2e2ed9383559d8e234f6e3a34e9396a4d25fe7baab07"
+    },
+    {
+      "path": "docs/Local Roboflow Inference.md",
+      "sha256": "0cf0a3fd5e6fda1e25c53e2296238dbff8bc49c164d790cb225ddbff292d5a15"
+    },
+    {
+      "path": "docs/Manual Control and Mobility.md",
+      "sha256": "90405b9034e55ad9de3825b3e526832a1ff714a8d4ca72d9574f97078aaf1ff6"
+    },
+    {
+      "path": "docs/Orientation Resume Checkpoint.md",
+      "sha256": "55d18d039dd93541915b3e98963f8da9e31b99e1e08507ab7fd05c88c257e695"
+    },
+    {
+      "path": "docs/Known Issues and Fixes.md",
+      "sha256": "463d05e41e23fff2ad7794889a6b6eb5cb2cd54fd63a98d667eaf8e90dd3d0c3"
+    },
+    {
+      "path": "docs/.obsidian/workspace.json",
+      "sha256": "33abd9b39bb8625a6a1af441130c3395a930b3f99eba7392619e96a156520af0"
+    },
+    {
+      "path": "docs/.obsidian/app.json",
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "path": "docs/.obsidian/core-plugins.json",
+      "sha256": "79985eff638a8a3f7fe2946dca1ed0872116d31028bb1498b0efb7ac4e11077b"
+    },
+    {
+      "path": "docs/.obsidian/graph.json",
+      "sha256": "7aea103242c7ad5a2f639ffd7e7e7444038875ddede6fb4ab4f4f6aa64caec01"
+    },
+    {
+      "path": "docs/.obsidian/appearance.json",
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "path": "docs/attachments/corrupt-render-example.png",
+      "sha256": "58c8a1dd6ab47367a5b522063909cba8cac327d9735ce1f1d030074c014ead3f"
+    },
+    {
+      "path": "docs/attachments/orientation-label-sample.jpg",
+      "sha256": "16fd484cce33df087c225362b9c1f9931b76980a1569047f2d928a406f844718"
+    },
+    {
+      "path": "docs/attachments/label-review.jpg",
+      "sha256": "4fb0fde27fd2cc3839cfe1a507d0a3c8283a57cd5fb5e97d682122e83ea50fe6"
+    },
+    {
+      "path": "docs/attachments/tank-overview.png",
+      "sha256": "e441024766174f2159cbd5a6cf9af849c5522e96dbc351e525532d1813fd26a7"
+    },
+    {
+      "path": "tests/test_contracts.py",
+      "sha256": "2a2bb44eaf861588298862738f280a1696126238c8a4f27923cb51857c92a3f0"
+    },
+    {
+      "path": "tests/test_navigation_errors.py",
+      "sha256": "0bedc93e29babe89a3ff2107d29c5c845694c187e4b845d21f917df46e8423ea"
+    },
+    {
+      "path": "tests/conftest.py",
+      "sha256": "241cf1487b9b49f4b7cb895791e2e9298330f2179dbc683cac6141d1758f96e1"
+    },
+    {
+      "path": "tests/test_manual_controls.py",
+      "sha256": "1b08f552e7792979d5b103c680a90ddba425bd37c61fbdf3bac870ceb8787515"
+    },
+    {
+      "path": "tests/test_bridge_launch.py",
+      "sha256": "47c7e7f28e88d3b7b8fe7cb24ade2da8b275505b519e51c31578049d4adfff83"
+    },
+    {
+      "path": "tests/test_detector_launch.py",
+      "sha256": "1edb87f7a46267170ebfcd78c6632374438ef3095009dee2882359ffb483f498"
+    },
+    {
+      "path": "tests/test_roboflow_launch.py",
+      "sha256": "0345df3c1d7aa3ddd5720c89e5cec7d7d38b7cb4b8cba40f7f6317096223e164"
+    },
+    {
+      "path": "tests/test_managed_deployment.py",
+      "sha256": "e6ff3ca02c564f5f2b41cd7a1f8ccd4f16c30b6f2e531a48487044d75501c6a2"
+    },
+    {
+      "path": "tests/test_quarantine.py",
+      "sha256": "baa95344c870f86638e009c0ab44472696685e327771b74cee10ffab8ed29e61"
+    },
+    {
+      "path": "tests/test_orientation.py",
+      "sha256": "ac8c4f93b8f67d68120b1cd8c77b8b26b18ae6a026ffe4c72af05eaa1ca02954"
+    },
+    {
+      "path": "tests/test_error_adapter_launch.py",
+      "sha256": "3f64c66189e154c02e273d997e975011f4a8a6ae8aaed0b49e9df2516de59761"
+    },
+    {
+      "path": "tests/test_promotion.py",
+      "sha256": "908f69a9c1cb940466d3e7f01651e0d1def17c79eee7dcf001e69c4595dd8b17"
+    },
+    {
+      "path": "tests/test_evaluation.py",
+      "sha256": "30015f6e2b6be0e22e19d8a50db4d11b44c33cae022e2887eb10664164a9539f"
+    },
+    {
+      "path": "tests/test_repeat_summary.py",
+      "sha256": "43cd442910096bd5093941163083fd2dbca57cb67107120db4dd1cade6c7d046"
+    },
+    {
+      "path": "tests/test_roboflow_export.py",
+      "sha256": "1bddfde13de1557414d3dd290b8e6f06817e4461af90e0c12fa4e5731288a675"
+    },
+    {
+      "path": "tests/test_roboflow_checkpoint.py",
+      "sha256": "fdf766346d70aa10c94132e3f4762106bf0920f31d3f1cc28b4e474cd5e5ddd2"
+    },
+    {
+      "path": "tests/test_roboflow_backend.py",
+      "sha256": "69d4e9a377e6ae4c7abaa7cd6cef974920384cd7182b594cae62b7a5333d094a"
+    },
+    {
+      "path": "tests/test_roboflow_transfer.py",
+      "sha256": "11c352162f0790a2242188ff6f23a7d22576eb1ec3736f877991f504f988cf39"
+    },
+    {
+      "path": "README.md",
+      "sha256": "918934b747e66d0c51011b97f37da3e4b80bb5cf2d4fa8396f64759146fdc2ac"
+    },
+    {
+      "path": ".dockerignore",
+      "sha256": "1e5d1bc3fcffd16c6a7c2bcc655f670371046b43f0f0582ae95a0a508c3b2ce0"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "31653817fb606c1c49a1db5dd935bb7f4d19502f91a4fe95a2f8e427b8f15bb2"
+    }
+  ],
+  "verification": {
+    "host_pytest_passed": 41,
+    "ros_only_skipped": 4,
+    "reverified_date": "2026-10-11"
+  }
+}

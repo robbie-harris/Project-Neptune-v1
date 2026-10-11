@@ -1,0 +1,13 @@
+.git
+data
+models
+outputs
+.venv
+.venv-host
+__pycache__
+build
+install
+log
+
+.venv*
+.secrets

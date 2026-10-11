@@ -1,0 +1,14 @@
+{
+  "world_frame": "world_ned", "body_frame": "Neptune/base_link",
+  "tank": {"size": [10, 6, 3]},
+  "spawn": {"xyz": [-3.8, 0, 1.5], "rpy": [0, 0, 0]},
+  "pipe": {"center": [4.4, 0, 1.5], "axis": [0, 1, 0], "length": 4, "radius": 0.2},
+  "cameras": {
+    "left": {"xyz": [0.62, -0.06, 0], "rpy": [1.5707963267948966, 0, 1.5707963267948966], "frame": "Neptune/CameraLeft"},
+    "right": {"xyz": [0.62, 0.06, 0], "rpy": [1.5707963267948966, 0, 1.5707963267948966], "frame": "Neptune/CameraRight"},
+    "down": {"xyz": [0, 0, 0.18], "rpy": [0, 0, 1.5707963267948966], "frame": "Neptune/CameraDown"}
+  },
+  "camera_resolution": [640, 480], "horizontal_fov": 80, "stereo_baseline": 0.12,
+  "rates_hz": {"physics": 100, "camera": 10, "sonar": 10, "imu": 100, "pressure": 20, "dvl": 10},
+  "noise": 0, "bias": 0, "yaw_drift": 0
+}

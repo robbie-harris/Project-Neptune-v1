@@ -1,0 +1,22 @@
+model: yolo11n.pt
+epochs: 100
+imgsz: 640
+batch: 16
+seed: 42
+workers: 0
+patience: 0  # Run all 100 planned epochs; zero disables early stopping.
+amp: false
+# No synthetic image corruption or sensor noise in this milestone.
+hsv_h: 0.0
+hsv_s: 0.0
+hsv_v: 0.0
+degrees: 0.0
+translate: 0.0
+scale: 0.0
+shear: 0.0
+perspective: 0.0
+flipud: 0.0
+fliplr: 0.0
+mosaic: 0.0
+mixup: 0.0
+erasing: 0.0

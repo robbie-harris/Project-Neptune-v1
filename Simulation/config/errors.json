@@ -1,0 +1,11 @@
+{
+  "seed": 42,
+  "camera": {"pixel_sigma": 2.0, "blur_kernel": 3, "red_gain": 0.94, "contrast": 0.96, "backscatter": 4.0, "exposure_variation": 0.03, "radial_k1": -0.015, "right_shift_px": 0.5, "dropout": 0.01, "exposure_s": 0.02, "max_motion_blur_px": 5},
+  "imu": {"angle_sigma_deg": 0.15, "angle_bias_deg": [0.1, -0.1, 0.2], "yaw_drift_deg_min": 0.3, "gyro_sigma_rad_s": 0.002, "gyro_bias_rad_s": [0.0005, -0.0005, 0.001], "accel_sigma_m_s2": 0.02, "accel_bias_m_s2": [0.005, -0.005, 0.01]},
+  "pressure": {"sigma_pa": 49.05, "bias_pa": 98.1, "dropout": 0.001},
+  "dvl": {"sigma_m_s": 0.002, "bias_m_s": [0.0005, -0.0003, 0.0002], "scale_error": 0.01, "altitude_sigma_m": 0.02, "dropout": 0.01, "bottom_lock_loss_probability": 0.002, "bottom_lock_loss_duration_s": 0.3},
+  "sonar": {"multiplicative_sigma": 0.1, "additive_sigma": 3.0, "dropout": 0.005, "ghost_gain": 0.03, "ghost_shift_px": 3},
+  "timing": {"delivery_delay_s": 0.015, "delivery_jitter_s": 0.005, "timestamp_jitter_s": 0.001, "right_offset_s": 0.006, "dvl_offset_s": 0.004},
+  "agreement": {"position_limit_m": 1.0, "angle_limit_deg": 15.0},
+  "return": {"timeout_s": 180.0, "position_tolerance_m": 0.12, "depth_tolerance_m": 0.08, "heading_tolerance_rad": 0.06, "max_surge": 0.5, "max_yaw": 0.4, "max_heave": 0.4, "stream_timeout_s": 0.75, "dvl_hold_sim_s": 0.6}
+}

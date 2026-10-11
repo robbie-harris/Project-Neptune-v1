@@ -1,0 +1,14 @@
+pipe_detector:
+  ros__parameters:
+    use_sim_time: true
+    backend: ultralytics
+    inference_url: http://neptune-inference:9001
+    model_id: projects-zwfft/neptune-pipe-orientation-a-3-yolo11n-t2
+    api_key_file: /run/secrets/roboflow_api_key
+    request_timeout: 10.0
+    weights: /workspace/models/pipe/best.pt
+    image_topic: /neptune/camera/left/image_color
+    confidence: 0.25
+    imgsz: 640
+    device: cpu
+    cpu_threads: 2

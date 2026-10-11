@@ -1,0 +1,1 @@
+roboflow/roboflow-inference-server-cpu@sha256:7e8c82e59549ca9dd451df6f29a7e3262d57d446cff819fdcb877df9af6c9b01
