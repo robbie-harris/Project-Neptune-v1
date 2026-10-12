@@ -65,3 +65,25 @@ def test_publish_drop_counters_and_diagnostics(node_class, probability):
     node_class.print_diagnostics(node)
     for sensor in messages:
         assert f'{sensor} received=1 published=' in logs[0]
+
+
+def test_fluid_pressure_bias_preserves_matching_header(node_class):
+    node_class, _ = node_class
+    published = []
+    node = NS(
+        degradation=SensorDegradation(pressure_bias=1000.0),
+        counts={'pressure': dict(received=0, published=0, dropped=0)},
+        publishers_={'pressure': NS(publish=published.append)})
+    raw = FluidPressure()
+    raw.header.stamp.sec = 123
+    raw.header.stamp.nanosec = 456
+    raw.header.frame_id = 'pressure'
+    raw.fluid_pressure = 555.204080251164
+    raw.variance = 25.0
+    node_class.receive(node, 'pressure', raw)
+    assert len(published) == 1
+    assert published[0].fluid_pressure == pytest.approx(raw.fluid_pressure + 1000.0)
+    assert published[0].header == raw.header
+    assert published[0].variance == raw.variance
+    assert raw.fluid_pressure == 555.204080251164
+    assert node.counts['pressure'] == dict(received=1, published=1, dropped=0)
