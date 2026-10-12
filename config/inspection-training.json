@@ -1,0 +1,56 @@
+{
+  "project_id": "projects-zwfft/neptune-inspection-objects",
+  "model_type": "yolov11n",
+  "requested_epochs": 100,
+  "input_size": 640,
+  "runs": 1,
+  "dataset_images": 6530,
+  "split_groups": [
+    457,
+    98,
+    98
+  ],
+  "split_images": [
+    4570,
+    980,
+    980
+  ],
+  "classes": [
+    "pipe",
+    "valve",
+    "flange"
+  ],
+  "license": "CC BY 4.0",
+  "source": "simulator-only",
+  "seed_control": "provider default; unavailable unless recipe entitlement changes",
+  "batch_control": "provider default; unavailable unless recipe entitlement changes",
+  "threshold_selection_split": "val",
+  "validation_selected_confidence": 0.05,
+  "acceptance": {
+    "recall_per_class_clear_moderate_iou_0_5": 0.95,
+    "negative_frame_fpr_max": 0.05,
+    "live_p95_latency_ratio_max": 1.1
+  },
+  "promotion_policy": "Explicit measured gates; keep pipe-only rollback",
+  "dataset_groups": 653,
+  "original_dataset_target": 9000,
+  "dataset_status": "sealed; all uploads confirmed; complete COCO export audited",
+  "version_number": 2,
+  "training_id": "cf8d962d68e32878e60b",
+  "training_status_at_submission": "running",
+  "training_status": "finished",
+  "model_id": "projects-zwfft/neptune-inspection-objects-2-yolo11n-t1",
+  "promotion_status": "blocked: original pipe orientation regression",
+  "candidate_launcher": "bash src/tools/run-inspection.sh --candidate",
+  "multiclass_test_accuracy_passed": true,
+  "original_pipe_regression_passed": false,
+  "live_ideal_ros_checks_passed": true,
+  "live_p95_latency_ratio": 0.868492777413981,
+  "cloud_metrics": {"map50": 80.69, "map5095": 67.91, "precision": 94.7, "recall": 74.1, "f1": 83.1},
+  "training_url": "https://app.roboflow.com/projects-zwfft/neptune-inspection-objects/2",
+  "completed_epochs": null,
+  "actual_seed": null,
+  "actual_batch_size": null,
+  "export_sha256": "16ec2dee78210ed305a8a000fd96ed697a200481420c4d845d39158e0722d752",
+  "manifest_sha256": "f672dcd51aacdf0aa1c153b2c8f8b7295baeac241624f9332585f0fb95e4ef1e"
+}

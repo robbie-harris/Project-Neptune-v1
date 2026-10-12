@@ -5,6 +5,7 @@ prevents the one-second safety stop. Camera/detection headers retain sim time.
 """
 import base64
 import json
+import math
 import socket
 import threading
 import time
@@ -17,8 +18,11 @@ from rclpy.clock_type import ClockType
 from rclpy.qos import qos_profile_sensor_data, QoSProfile, DurabilityPolicy
 from sensor_msgs.msg import Image, Imu, FluidPressure
 from stonefish_ros2.msg import DVL
-from std_msgs.msg import Float64MultiArray, String, Bool
+from std_msgs.msg import Float64MultiArray, String, Bool, Float64
 from .protocol import command, active_command
+from .autonomous_power import validate_power
+from .optics import DEFAULTS, validate_profile, native_request, applied_profile
+from .views import DEFAULTS as VIEW_DEFAULTS,validate_views,view_rates
 
 
 class Bridge(Node):
@@ -27,14 +31,28 @@ class Bridge(Node):
         self.declare_parameter('port',9090)
         self.declare_parameter('preview_fps',10.0)
         self.declare_parameter('realistic',False)
+        self.declare_parameter('lateral_enabled',False)
+        self.lateral_enabled=bool(self.get_parameter('lateral_enabled').value)
+        self.declare_parameter('manual_scale',1.0)
+        self.manual_scale=max(0.,min(1.,float(self.get_parameter('manual_scale').value)))
         self.preview_interval=1.0/max(1.0,min(30.0,self.get_parameter('preview_fps').value))
         self.lock=threading.Lock(); self.stop=threading.Event(); self.gui_clients=[]
         self.cmd=[0.0]*3; self.cmd_t=0.0; self.frames={}; self.preview='annotated'
         self.detector={'state':'unavailable','reason':'Waiting for detector'}; self.det_t=0.0
         self.seen={}; self.last_sent=None; self.overview_sent=None; self.frame_versions={}; self.cv=CvBridge()
         self.telemetry={}; self.telemetry_t=0.; self.auto_cmd=[0.]*3; self.auto_t=0.; self.auto_requested=False; self.auto_seen=False; self.request_t=0.
+        self.optics_id=0; self.optics_t=0.; self.optics_seen=0.
+        self.optics={'state':'pending','requested':dict(DEFAULTS),'applied':None}
+        self.views={'state':'pending','requested':dict(VIEW_DEFAULTS),'applied':None}
+        self.views_id=0;self.views_t=time.monotonic()
+        self.views_pub=self.create_publisher(Float64MultiArray,'/neptune/views/request',10)
+        self.create_subscription(Float64MultiArray,'/neptune/views/applied',self.views_message,10)
+        self.optics_pub=self.create_publisher(Float64MultiArray,'/neptune/optics/request',10)
+        self.create_subscription(Float64MultiArray,'/neptune/optics/applied',self.optics_message,10)
         self.realistic=self.get_parameter('realistic').value
         self.mode_pub=self.create_publisher(Bool,'/neptune/simulation/realistic',QoSProfile(depth=1,durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self.power_pub=self.create_publisher(Float64,'/neptune/control/autonomous_power',QoSProfile(depth=1,durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self.power_pub.publish(Float64(data=100.))
         self.mission_pub=self.create_publisher(String,'/neptune/control/request',10)
         self.mode_pub.publish(Bool(data=self.realistic))
         self.create_subscription(String,'/neptune/telemetry',self.telemetry_message,10)
@@ -52,13 +70,44 @@ class Bridge(Node):
     def mark(self,key):
         with self.lock: self.seen[key]=time.monotonic()
 
+    def views_message(self,msg):
+        with self.lock:
+            if len(msg.data)!=4 or msg.data[0]!=self.views_id:return
+            if msg.data[3]!=1:
+                self.views={**self.views,'state':'error','reason':'Native view priority update failed'};return
+            profile={'camera':bool(msg.data[1]),'overview':bool(msg.data[2])}
+            if profile!=self.views['requested']:return
+            self.views={'state':'applied','requested':profile,'applied':profile,'requested_rates_hz':view_rates(profile)}
+
+    def optics_message(self,msg):
+        with self.lock:
+            self.optics_seen=time.monotonic()
+            if len(msg.data)!=6: return
+            if msg.data[0]!=self.optics_id:
+                if self.optics['state']=='pending' and self.optics_t: return
+                self.optics_id=int(msg.data[0])
+                try: self.optics['requested']=applied_profile(msg.data)
+                except ValueError: return
+            try:
+                applied=applied_profile(msg.data)
+                if applied!=self.optics['requested']: raise ValueError('Applied profile mismatch')
+                self.optics={'state':'applied','requested':applied,'applied':applied}
+            except ValueError as exc:
+                self.optics={**self.optics,'state':'error','reason':str(exc)}
+
     def telemetry_message(self,msg):
         try: payload=json.loads(msg.data)
         except ValueError: return
         with self.lock: self.telemetry=payload; self.telemetry_t=time.monotonic()
 
     def return_command(self,msg):
-        try: values=command({'cmd':list(msg.data)})
+        try:
+            raw=list(msg.data)
+            if len(raw) != (4 if self.lateral_enabled else 3):return
+            values=command({'cmd':raw[:3]})
+            if self.lateral_enabled:
+                if not math.isfinite(raw[3]) or abs(raw[3])>1:return
+                values.append(float(raw[3]))
         except (ValueError,TypeError): return
         with self.lock: self.auto_cmd=values; self.auto_t=time.monotonic()
 
@@ -67,6 +116,9 @@ class Bridge(Node):
         self.mission_pub.publish(String(data='cancel:'+reason))
 
     def image(self,msg,kind):
+        with self.lock:
+            self.seen[kind]=time.monotonic()
+            if not self.views['requested']['overview' if kind=='overview' else 'camera']:return
         frame=self.cv.imgmsg_to_cv2(msg,desired_encoding='bgr8')
         with self.lock:
             self.frames[kind]=frame; self.seen[kind]=time.monotonic()
@@ -116,14 +168,35 @@ class Bridge(Node):
                             with self.lock:
                                 self.cancel_return('Error profile changed'); self.cmd=[0.]*3; self.cmd_t=time.monotonic(); self.realistic=payload['realistic']
                                 self.mode_pub.publish(Bool(data=self.realistic))
-                        if payload.get('mission') in ('return','cancel'):
+                        if 'optics' in payload:
+                            profile=validate_profile(payload['optics'])
                             with self.lock:
-                                if payload['mission']=='return':
+                                if self.auto_requested:self.cancel_return('Optical settings changed')
+                                self.optics_id+=1; self.optics_t=time.monotonic()
+                                self.optics={**self.optics,'state':'pending','requested':profile}
+                                self.optics.pop('reason',None)
+                                self.optics_pub.publish(Float64MultiArray(data=native_request(profile,self.optics_id)))
+                        if 'autonomous_power_percent' in payload:
+                            percent=validate_power(payload['autonomous_power_percent'])
+                            self.power_pub.publish(Float64(data=percent))
+                        if payload.get('mission') in ('return','inspect','cancel'):
+                            with self.lock:
+                                if payload['mission'] in ('return','inspect'):
                                     self.cmd=[0.]*3; self.cmd_t=time.monotonic(); self.auto_requested=True; self.auto_seen=False; self.request_t=time.monotonic()
-                                    self.mission_pub.publish(String(data='return'))
-                                else: self.cancel_return('Operator stop')
+                                    self.mission_pub.publish(String(data=payload['mission']))
+                                else:
+                                    self.cmd=[0.]*3;self.cmd_t=time.monotonic();self.cancel_return('Operator stop')
                         if payload.get('preview') in ('raw','annotated'):
                             with self.lock: self.preview=payload['preview']
+                        if 'views' in payload:
+                            profile=validate_views(payload['views'])
+                            with self.lock:
+                                self.views_id+=1;self.views_t=time.monotonic()
+                                self.views={'state':'pending','requested':profile,'applied':self.views.get('applied')}
+                                self.last_sent=None;self.overview_sent=None
+                                for kind in ('raw','annotated','overview'):
+                                    if not profile['overview' if kind=='overview' else 'camera']:self.frames.pop(kind,None)
+                                self.views_pub.publish(Float64MultiArray(data=[float(self.views_id),float(profile['camera']),float(profile['overview'])]))
                     except (ValueError,TypeError,AttributeError): pass
         except OSError: pass
         finally: self.drop(conn)
@@ -138,20 +211,28 @@ class Bridge(Node):
     def tick(self):
         now=time.monotonic()
         with self.lock:
-            cmd=active_command(self.cmd,self.cmd_t,now); det=dict(self.detector)
+            cmd=active_command(self.cmd,self.cmd_t,now);cmd[:2]=[v*self.manual_scale for v in cmd[:2]];det=dict(self.detector)
             telemetry=dict(self.telemetry) if now-self.telemetry_t<1 else {'ready':False,'reason':'Telemetry stale'}
             if self.auto_requested:
                 if now-self.cmd_t>=1: self.cancel_return('GUI heartbeat timed out')
                 elif now-self.telemetry_t>=1 or now-self.auto_t>=.5: self.cancel_return('Controller unavailable')
-                elif telemetry.get('return',{}).get('active'):
+                elif telemetry.get('autonomy',telemetry.get('return',{})).get('active'):
                     self.auto_seen=True; cmd=list(self.auto_cmd)
                 elif self.auto_seen or now-self.request_t>1:
                     self.auto_requested=False
             if now-self.det_t>2: det={'state':'unavailable','reason':'Detector status stale','detections':[]}
             if now-self.seen.get('raw',0)>2: det={**det,'detections':[],'camera_stale':True}
             health={key:now-t<2 for key,t in self.seen.items()}
-        self.pub.publish(Float64MultiArray(data=cmd))
-        self.send({'state':{'thrusters':cmd,'detector':det,'sensors':health,'telemetry':telemetry,'realistic':self.realistic}})
+            optics=dict(self.optics)
+            if self.optics_seen and now-self.optics_seen>2:
+                optics={**optics,'state':'error','reason':'Native optical status stale'}
+            elif optics['state']=='pending' and self.optics_t and now-self.optics_t>5:
+                optics={**optics,'state':'error','reason':'Native optical update timed out'}
+            views=dict(self.views)
+            if views['state']=='pending' and now-self.views_t>5:views={**views,'state':'error','reason':'Native view update timed out'}
+        actuators=cmd[:3]+([cmd[3],cmd[3]] if len(cmd)==4 else [0.,0.]) if self.lateral_enabled else cmd
+        self.pub.publish(Float64MultiArray(data=actuators))
+        self.send({'state':{'thrusters':cmd[:3],'sway':cmd[3] if len(cmd)==4 else 0.,'detector':det,'sensors':health,'telemetry':telemetry,'realistic':self.realistic,'optics':optics,'views':views}})
 
     def send_image(self):
         now=time.monotonic()
@@ -160,7 +241,8 @@ class Bridge(Node):
             if frame is None or now-self.seen.get(actual_preview,0)>2:
                 actual_preview='raw'; frame=self.frames.get('raw')
             version=(actual_preview,self.frame_versions.get(actual_preview,0))
-        if frame is not None and version!=self.last_sent:
+            camera_enabled=self.views['requested']['camera']
+        if camera_enabled and frame is not None and version!=self.last_sent:
             preview=frame if frame.shape[:2]==(480,640) else cv2.resize(frame,(640,480))
             ok,png=cv2.imencode('.png',preview,[cv2.IMWRITE_PNG_COMPRESSION,1])
             if ok:
@@ -169,7 +251,8 @@ class Bridge(Node):
         with self.lock:
             overview=self.frames.get('overview'); version=self.frame_versions.get('overview',0)
             fresh=now-self.seen.get('overview',0)<2
-        if overview is not None and fresh and version!=self.overview_sent:
+            overview_enabled=self.views['requested']['overview']
+        if overview_enabled and overview is not None and fresh and version!=self.overview_sent:
             preview=overview if overview.shape[:2]==(240,640) else cv2.resize(overview,(640,240))
             ok,png=cv2.imencode('.png',preview,[cv2.IMWRITE_PNG_COMPRESSION,1])
             if ok:

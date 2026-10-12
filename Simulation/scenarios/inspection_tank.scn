@@ -1,0 +1,305 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<scenario>
+  <solver>
+    <multithreading max_physics_threads="4" />
+  </solver>
+  <environment>
+    <ned latitude="41.0" longitude="2.0" />
+    <ocean>
+      <water density="1000.0" jerlov="0.02" />
+      <waves height="0.0" />
+    </ocean>
+    <atmosphere>
+      <sun azimuth="120.0" elevation="60.0" />
+    </atmosphere>
+  </environment>
+  <materials>
+    <material name="Neutral" density="1000.0" restitution="0.3" />
+    <material name="Concrete" density="2400.0" restitution="0.3" />
+    <friction_table>
+      <friction material1="Neutral" material2="Neutral" static="0.5" dynamic="0.2" />
+      <friction material1="Neutral" material2="Concrete" static="0.5" dynamic="0.2" />
+      <friction material1="Concrete" material2="Concrete" static="0.8" dynamic="0.6" />
+    </friction_table>
+  </materials>
+  <looks>
+    <look name="tile" rgb="0.55 0.7 0.75" roughness="0.8" />
+    <look name="floor" rgb="0.45 0.55 0.6" roughness="0.9" />
+    <look name="auv_body" rgb="1.0 0.8 0.0" roughness="0.3" />
+    <look name="obstacle" rgb="0.9 0.25 0.1" roughness="0.5" />
+    <look name="panel" gray="0.8" roughness="0.9" />
+    <look name="pipe" rgb="0.75 0.32 0.12" roughness="0.6" />
+    <look name="valve" rgb="0.18 0.48 0.65" roughness="0.45" />
+    <look name="flange" rgb="0.65 0.67 0.7" roughness="0.45" />
+  </looks>
+  <static name="PoolFloor" type="box">
+    <dimensions xyz="10.4 6.4 0.2" />
+    <material name="Concrete" />
+    <look name="floor" />
+    <world_transform rpy="0.0 0.0 0.0" xyz="0.0 0.0 3.12" />
+  </static>
+  <static name="PoolWallXPos" type="box">
+    <dimensions xyz="0.2 6.4 3.2" />
+    <material name="Concrete" />
+    <look name="tile" />
+    <world_transform rpy="0.0 0.0 0.0" xyz="5.1 0.0 1.52" />
+  </static>
+  <static name="PoolWallXNeg" type="box">
+    <dimensions xyz="0.2 6.4 3.2" />
+    <material name="Concrete" />
+    <look name="tile" />
+    <world_transform rpy="0.0 0.0 0.0" xyz="-5.1 0.0 1.52" />
+  </static>
+  <static name="PoolWallYPos" type="box">
+    <dimensions xyz="10.4 0.2 3.2" />
+    <material name="Concrete" />
+    <look name="tile" />
+    <world_transform rpy="0.0 0.0 0.0" xyz="0.0 3.1 1.52" />
+  </static>
+  <static name="PoolWallYNeg" type="box">
+    <dimensions xyz="10.4 0.2 3.2" />
+    <material name="Concrete" />
+    <look name="tile" />
+    <world_transform rpy="0.0 0.0 0.0" xyz="0.0 -3.1 1.52" />
+  </static>
+  <sensor name="TankOverview" type="camera" rate="5">
+    <world_transform xyz="0 2.85 0.35" rpy="1.187267 0 0" />
+    <specs resolution_x="640" resolution_y="240" horizontal_fov="125" />
+    <rendering minimum_distance="0.05" maximum_distance="20" />
+    <ros_publisher topic="/neptune/overview" frame_id="TankOverview" />
+  </sensor>
+  <robot name="Neptune" fixed="false" self_collisions="false">
+    <base_link name="Vehicle" type="compound" physics="submerged" buoyant="true">
+      <external_part name="Hull" type="cylinder" physics="submerged" buoyant="true">
+        <dimensions radius="0.15" height="0.9" />
+        <cg xyz="-0.02 0 0" rpy="0 0 0" />
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <compound_transform xyz="0 0 0" rpy="0 1.5707963267948966 0" />
+        <material name="Neutral" />
+        <look name="auv_body" />
+      </external_part>
+      <external_part name="Nose" type="sphere" physics="submerged" buoyant="true">
+        <dimensions radius="0.15" />
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <compound_transform xyz="0.45 0 0" rpy="0 0 0" />
+        <material name="Neutral" />
+        <look name="auv_body" />
+      </external_part>
+      <external_part name="Tail" type="sphere" physics="submerged" buoyant="true">
+        <dimensions radius="0.15" />
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <compound_transform xyz="-0.45 0 0" rpy="0 0 0" />
+        <material name="Neutral" />
+        <look name="auv_body" />
+      </external_part>
+      <external_part name="HorizontalFin" type="box" physics="submerged" buoyant="true">
+        <dimensions xyz="0.2 0.5 0.025" />
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <compound_transform xyz="-0.4 0 0" rpy="0 0 0" />
+        <material name="Neutral" />
+        <look name="auv_body" />
+      </external_part>
+      <external_part name="VerticalFin" type="box" physics="submerged" buoyant="true">
+        <dimensions xyz="0.2 0.025 0.45" />
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <compound_transform xyz="-0.4 0 0" rpy="0 0 0" />
+        <material name="Neutral" />
+        <look name="auv_body" />
+      </external_part>
+    </base_link>
+    <actuator name="ThrusterPort" type="thruster">
+      <link name="Vehicle" />
+      <origin rpy="0 0 0" xyz="-0.5 -0.18 0" />
+      <specs max_setpoint="104.72" normalized_setpoint="true" />
+      <propeller diameter="0.12" right="true">
+        <mesh filename="../assets/propeller.obj" scale="1.0" />
+        <material name="Neutral" />
+        <look name="auv_body" />
+      </propeller>
+      <rotor_dynamics type="mechanical_pi">
+        <kp value="1.0" />
+        <ki value="0.5" />
+        <ilimit value="2.0" />
+      </rotor_dynamics>
+      <thrust_model type="fluid_dynamics">
+        <thrust_coeff forward="0.48" reverse="0.48" />
+        <torque_coeff value="0.05" />
+      </thrust_model>
+    </actuator>
+    <actuator name="ThrusterStarboard" type="thruster">
+      <link name="Vehicle" />
+      <origin rpy="0 0 0" xyz="-0.5 0.18 0" />
+      <specs max_setpoint="104.72" normalized_setpoint="true" inverted_setpoint="true" />
+      <propeller diameter="0.12" right="false">
+        <mesh filename="../assets/propeller.obj" scale="1.0" />
+        <material name="Neutral" />
+        <look name="auv_body" />
+      </propeller>
+      <rotor_dynamics type="mechanical_pi">
+        <kp value="1.0" />
+        <ki value="0.5" />
+        <ilimit value="2.0" />
+      </rotor_dynamics>
+      <thrust_model type="fluid_dynamics">
+        <thrust_coeff forward="0.48" reverse="0.48" />
+        <torque_coeff value="0.05" />
+      </thrust_model>
+    </actuator>
+    <actuator name="ThrusterHeave" type="thruster">
+      <link name="Vehicle" />
+      <origin rpy="0 1.5707963267948966 0" xyz="0 0 0" />
+      <specs max_setpoint="104.72" normalized_setpoint="true" />
+      <propeller diameter="0.12" right="true">
+        <mesh filename="../assets/propeller.obj" scale="1.0" />
+        <material name="Neutral" />
+        <look name="auv_body" />
+      </propeller>
+      <rotor_dynamics type="mechanical_pi">
+        <kp value="1.0" />
+        <ki value="0.5" />
+        <ilimit value="2.0" />
+      </rotor_dynamics>
+      <thrust_model type="fluid_dynamics">
+        <thrust_coeff forward="0.48" reverse="0.48" />
+        <torque_coeff value="0.05" />
+      </thrust_model>
+    </actuator>
+    <ros_subscriber thrusters="/neptune/thrusters" />
+    <ros_base_link_transform publish="true" />
+    <world_transform rpy="0 0 0" xyz="-3.8 0 1.5" />
+    <sensor name="CameraLeft" type="camera" rate="10">
+      <link name="Vehicle" />
+      <origin xyz="0.62 -0.06 0" rpy="1.5707963267948966 0 1.5707963267948966" />
+      <specs resolution_x="640" resolution_y="480" horizontal_fov="80" />
+      <rendering minimum_distance="0.05" maximum_distance="20" />
+      <ros_publisher topic="/neptune/ideal/camera/left" frame_id="Neptune/CameraLeft" />
+      <ros_service set_enabled="/neptune/sensors/CameraLeft/set_enabled" />
+    </sensor>
+    <sensor name="CameraRight" type="camera" rate="10">
+      <link name="Vehicle" />
+      <origin xyz="0.62 0.06 0" rpy="1.5707963267948966 0 1.5707963267948966" />
+      <specs resolution_x="640" resolution_y="480" horizontal_fov="80" />
+      <rendering minimum_distance="0.05" maximum_distance="20" />
+      <ros_publisher topic="/neptune/ideal/camera/right" frame_id="Neptune/CameraRight" />
+      <ros_service set_enabled="/neptune/sensors/CameraRight/set_enabled" />
+    </sensor>
+    <sensor name="CameraDown" type="camera" rate="10">
+      <link name="Vehicle" />
+      <origin xyz="0 0 0.18" rpy="0 0 1.5707963267948966" />
+      <specs resolution_x="640" resolution_y="480" horizontal_fov="80" />
+      <rendering minimum_distance="0.05" maximum_distance="20" />
+      <ros_publisher topic="/neptune/ideal/camera/down" frame_id="Neptune/CameraDown" />
+      <ros_service set_enabled="/neptune/sensors/CameraDown/set_enabled" />
+    </sensor>
+    <sensor name="IMU" type="imu" rate="100">
+      <link name="Vehicle" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <range angular_velocity="100 100 100" linear_acceleration="100" />
+      <noise angle="0 0 0" angular_velocity="0" yaw_drift="0" linear_acceleration="0" />
+      <ros_publisher topic="/neptune/ideal/imu" />
+    </sensor>
+    <sensor name="Pressure" type="pressure" rate="20">
+      <link name="Vehicle" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <range pressure="100000" />
+      <noise pressure="0" />
+      <ros_publisher topic="/neptune/ideal/pressure" />
+    </sensor>
+    <sensor name="DVL" type="dvl" rate="10">
+      <link name="Vehicle" />
+      <origin xyz="0 0 0.18" rpy="0 0 0" />
+      <specs beam_angle="30" beam_positive_z="true" />
+      <range velocity="10 10 10" altitude_min="0.1" altitude_max="10" />
+      <noise velocity_percent="0" velocity="0" altitude="0" water_velocity_percent="0" water_velocity="0" />
+      <ros_publisher topic="/neptune/ideal/dvl" altitude_topic="/neptune/ideal/altitude" />
+    </sensor>
+    <sensor name="Sonar" type="fls" rate="10">
+      <link name="Vehicle" />
+      <origin xyz="0.61 0 0" rpy="1.5707963267948966 0 1.5707963267948966" />
+      <specs beams="128" bins="200" horizontal_fov="90" vertical_fov="30" />
+      <settings range_min="0.1" range_max="12" gain="1" />
+      <noise multiplicative="0" additive="0" />
+      <display colormap="hot" />
+      <ros_publisher topic="/neptune/ideal/sonar" />
+      <ros_service set_enabled="/neptune/sensors/Sonar/set_enabled" />
+    </sensor>
+    <sensor name="GroundTruth" type="odometry" rate="100">
+      <link name="Vehicle" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <noise position="0" velocity="0" angle="0" angular_velocity="0" />
+      <ros_publisher topic="/neptune/ground_truth" />
+    </sensor>
+    <light name="LightLeft">
+      <link name="Vehicle" />
+      <origin xyz="0.61 -0.12 0" rpy="1.5707963267948966 0 1.5707963267948966" />
+      <specs illuminance="800" radius="0.015" cone_angle="90" />
+      <color rgb="1 1 1" />
+      <ros_service topic="/neptune/optics/LightLeft/set_enabled" />
+    </light>
+    <light name="LightRight">
+      <link name="Vehicle" />
+      <origin xyz="0.61 0.12 0" rpy="1.5707963267948966 0 1.5707963267948966" />
+      <specs illuminance="800" radius="0.015" cone_angle="90" />
+      <color rgb="1 1 1" />
+      <ros_service topic="/neptune/optics/LightRight/set_enabled" />
+    </light>
+    <sensor name="CaptureInstances" type="segmentation" rate="10">
+      <link name="Vehicle" />
+      <origin xyz="0.62 -0.06 0" rpy="1.5707963267948966 0 1.5707963267948966" />
+      <specs resolution_x="640" resolution_y="480" horizontal_fov="80" />
+      <rendering minimum_distance="0.05" maximum_distance="20" />
+      <ros_publisher topic="/neptune/capture/instances" frame_id="Neptune/CameraLeft" />
+      <ros_service set_enabled="/neptune/capture/instances/set_enabled" />
+    </sensor>
+  </robot>
+  <static name="TankRoof" type="box">
+    <dimensions xyz="10.4 6.4 0.2" />
+    <material name="Concrete" />
+    <look name="tile" />
+    <world_transform xyz="0 0 -0.08" rpy="0 0 0" />
+  </static>
+  <static name="Pipeline" type="cylinder">
+    <dimensions radius="0.2" height="4" />
+    <material name="Concrete" />
+    <look name="pipe" />
+    <world_transform xyz="4.4 0 1.5" rpy="1.5707963267948966 0 0" />
+  </static>
+  <static name="InspectionValve" type="model">
+    <physical>
+      <mesh filename="../assets/valve.obj" scale="1" convex="false" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+    </physical>
+    <visual>
+      <mesh filename="../assets/valve.obj" scale="1" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+    </visual>
+    <material name="Concrete" />
+    <look name="valve" />
+    <world_transform xyz="4.4 -0.85 1.5" rpy="0 0 0" />
+  </static>
+  <static name="InspectionFlange" type="model">
+    <physical>
+      <mesh filename="../assets/flange.obj" scale="1" convex="false" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+    </physical>
+    <visual>
+      <mesh filename="../assets/flange.obj" scale="1" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
+    </visual>
+    <material name="Concrete" />
+    <look name="flange" />
+    <world_transform xyz="4.4 0.85 1.5" rpy="0 0 0" />
+  </static>
+  <static name="SupportLeft" type="box">
+    <dimensions xyz="0.12 0.12 1.25" />
+    <material name="Concrete" />
+    <look name="panel" />
+    <world_transform xyz="4.65 -1.7 2.35" rpy="0 0 0" />
+  </static>
+  <static name="SupportRight" type="box">
+    <dimensions xyz="0.12 0.12 1.25" />
+    <material name="Concrete" />
+    <look name="panel" />
+    <world_transform xyz="4.65 1.7 2.35" rpy="0 0 0" />
+  </static>
+</scenario>

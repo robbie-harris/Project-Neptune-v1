@@ -1,0 +1,101 @@
+{
+  "name": "Fast inspection \u2014 60 second deadline",
+  "navigation": "Known inspection-scene layout with sensor dead reckoning; YOLO confirms visits",
+  "pipe_endpoints": [
+    [
+      4.4,
+      -2.0,
+      1.5
+    ],
+    [
+      4.4,
+      2.0,
+      1.5
+    ]
+  ],
+  "components": [
+    {
+      "class": "valve",
+      "position": [
+        4.4,
+        -0.85,
+        1.5
+      ]
+    },
+    {
+      "class": "flange",
+      "position": [
+        4.4,
+        0.85,
+        1.5
+      ]
+    }
+  ],
+  "body_standoff_m": 1.7,
+  "endpoint_inset_m": 0.15,
+  "scan_step_m": 2.0,
+  "lateral_heading_deg": 25,
+  "timeout_s": 60,
+  "leg_timeout_s": 45,
+  "observation_timeout_s": 8,
+  "camera_timeout_s": 3,
+  "inference_timeout_s": 3,
+  "perception_recovery_s": 25,
+  "confirmation_frames": 3,
+  "confidence": 0.05,
+  "position_tolerance_m": 0.2,
+  "transit_tolerance_m": 0.16,
+  "travel_alignment_rad": 1.0,
+  "heading_tolerance_rad": 0.1,
+  "cruise_speed_m_s": 1.1,
+  "max_surge": 0.95,
+  "max_yaw": 0.5,
+  "max_heave": 0.95,
+  "observation_rate_rad_s": 0.08,
+  "distance_speed_gain": 0.85,
+  "speed_gain": 0.16,
+  "speed_scale": 1.0,
+  "drag_feedforward": 0.075,
+  "yaw_gain": 2.0,
+  "yaw_damping": 2.0,
+  "yaw_scale": 16.0,
+  "thrust_allocation": true,
+  "return": {
+    "timeout_s": 60,
+    "cruise_speed_m_s": 1.1,
+    "distance_speed_gain": 0.7,
+    "travel_alignment_rad": 0.15,
+    "max_surge": 0.95,
+    "max_yaw": 0.5,
+    "speed_gain": 0.16,
+    "speed_scale": 1.0,
+    "drag_feedforward": 0.075,
+    "yaw_gain": 2.0,
+    "yaw_damping": 2.0,
+    "yaw_scale": 16.0,
+    "thrust_allocation": true,
+    "holonomic": true,
+    "max_heave": 0.95,
+    "heave_gain": 0.8,
+    "heave_damping": 1.2,
+    "sway_gain": 0.2,
+    "sway_feedforward": 0.4,
+    "max_sway": 0.65,
+    "sway_cruise_speed_m_s": 0.5
+  },
+  "keep_scan_heading": true,
+  "moving_confirmations": true,
+  "confirmation_radius_m": 1.2,
+  "moving_visit_tolerance_m": 0.25,
+  "corner_speed_max": 0.3,
+  "travel_heading_limit_deg": 45,
+  "smooth_alignment": true,
+  "holonomic": true,
+  "heave_gain": 0.8,
+  "heave_damping": 1.2,
+  "sway_gain": 0.6,
+  "sway_feedforward": 0.4,
+  "max_sway": 0.95,
+  "sway_cruise_speed_m_s": 0.55,
+  "final_visit_speed_max": 0.3
+}

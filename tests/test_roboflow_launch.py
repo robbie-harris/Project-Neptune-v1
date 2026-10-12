@@ -27,7 +27,7 @@ class Handler(BaseHTTPRequestHandler):
             self.server.load_requests+=1
             if self.server.load_requests==1:
                 self.send_error(503); return
-        result={'models':[]} if self.path=='/model/add' else {'image':{'width':640,'height':480},'predictions':[{'class':'pipe','x':320,'y':240,'width':80,'height':40,'confidence':.95}]}
+        result={'models':[]} if self.path=='/model/add' else {'image':{'width':640,'height':480},'predictions':[{'class':c,'x':320+20*i,'y':240,'width':80,'height':40,'confidence':.95} for i,c in enumerate(('pipe','valve','flange'))]}
         self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(json.dumps(result).encode())
 
 
@@ -40,25 +40,30 @@ def generate_test_description():
     detector=Node(package='neptune_perception',executable='pipe_detector',parameters=[{
         'backend':'roboflow','model_id':'test/model','api_key_file':str(key),
         'inference_url':f'http://127.0.0.1:{server.server_port}','use_sim_time':False,
-        'image_topic':'/test_rf/input'}], remappings=[('/neptune/perception/annotated','/test_rf/output'),('/neptune/perception/pipe_detections','/test_rf/boxes')])
+        'image_topic':'/test_rf/input'}], remappings=[('/neptune/perception/annotated','/test_rf/output'),('/neptune/perception/pipe_detections','/test_rf/boxes'),('/neptune/perception/object_detections','/test_rf/objects')])
     return launch.LaunchDescription([detector,actions.ReadyToTest()]), {'server':server,'temporary':temporary}
 
 
 class TestROSContract(unittest.TestCase):
     def test_recovers_and_preserves_timestamp_and_box_coordinates(self,server,temporary):
-        rclpy.init(); node=rclpy.create_node('roboflow_contract_test'); images=[]; boxes=[]
+        rclpy.init(); node=rclpy.create_node('roboflow_contract_test'); images=[]; boxes=[]; objects=[]
         publisher=node.create_publisher(Image,'/test_rf/input',10)
         node.create_subscription(Image,'/test_rf/output',images.append,10)
         node.create_subscription(Detection2DArray,'/test_rf/boxes',boxes.append,10)
+        node.create_subscription(Detection2DArray,'/test_rf/objects',objects.append,10)
         frame=Image(); frame.header.stamp.sec=123; frame.header.stamp.nanosec=456; frame.header.frame_id='left_optical'
         frame.width=640; frame.height=480; frame.encoding='bgr8'; frame.step=640*3; frame.data=bytes(640*480*3)
         try:
             end=time.monotonic()+15
-            while time.monotonic()<end and not (images and boxes):
+            while time.monotonic()<end and not (images and boxes and objects):
                 publisher.publish(frame); rclpy.spin_once(node,timeout_sec=.1)
             self.assertTrue(images); self.assertTrue(boxes)
             self.assertGreaterEqual(server.load_requests,2)
             self.assertEqual(images[-1].header,frame.header); self.assertEqual(boxes[-1].header,frame.header)
+            self.assertEqual(len(boxes[-1].detections),1)
+            self.assertEqual(objects[-1].header,frame.header)
+            self.assertEqual([d.results[0].hypothesis.class_id for d in objects[-1].detections],['pipe','valve','flange'])
+            self.assertTrue(all(d.header==frame.header for d in objects[-1].detections))
             detection=boxes[-1].detections[0]
             self.assertEqual(detection.header,frame.header)
             self.assertEqual(detection.bbox.center.position.x,320.)

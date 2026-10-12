@@ -1,4 +1,6 @@
 ARG BASE_IMAGE=ros:jazzy
+ARG DEPENDENCY_IMAGE=ros:jazzy
+FROM ${DEPENDENCY_IMAGE} AS dependency_cache
 FROM ${BASE_IMAGE}
 ARG STONEFISH_REV=b21eb8e194c570ff2f61e91aeffb38d73dc25f42
 ARG STONEFISH_ROS2_REV=6646e7ac25eed982f37f807abc7b545dbd2d6648
@@ -17,15 +19,28 @@ RUN if [ ! -d /opt/stonefish/.git ]; then git clone https://github.com/patrykcie
     && if [ ! -d /opt/stonefish_ws/src/stonefish_ros2/.git ]; then git clone https://github.com/patrykcieslak/stonefish_ros2.git /opt/stonefish_ws/src/stonefish_ros2; fi \
     && git -C /opt/stonefish_ws/src/stonefish_ros2 checkout ${STONEFISH_ROS2_REV}
 COPY src/tools/patch_stonefish.py /tmp/patch_stonefish.py
+COPY src/tools/patch_optics.py /tmp/patch_optics.py
+COPY src/tools/patch_views.py /tmp/patch_views.py
 RUN python3 /tmp/patch_stonefish.py /opt/stonefish /opt/stonefish_ws/src/stonefish_ros2 \
+    && python3 /tmp/patch_optics.py /opt/stonefish /opt/stonefish_ws/src/stonefish_ros2 \
+    && python3 /tmp/patch_views.py /opt/stonefish /opt/stonefish_ws/src/stonefish_ros2 \
     && cmake -S /opt/stonefish -B /opt/stonefish/build -DCMAKE_BUILD_TYPE=Release \
     && cmake --build /opt/stonefish/build -j4 && cmake --install /opt/stonefish/build \
     && . /opt/ros/jazzy/setup.sh \
     && rosdep update && rosdep install --from-paths /opt/stonefish_ws/src --ignore-src --skip-keys pcl -r -y \
     && cd /opt/stonefish_ws && colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 COPY config/requirements.txt /tmp/requirements.txt
-RUN python3 -m venv --system-site-packages /opt/neptune-venv \
-    && /opt/neptune-venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
+# Optional reuse of an already verified Neptune Python runtime avoids repeated
+# wheel downloads when only native renderer sources change. Fresh builds still
+# install the pinned requirements normally; checksums are never disabled.
+RUN --mount=type=bind,from=dependency_cache,source=/opt,target=/dependency-opt,ro \
+    if [ -x /dependency-opt/neptune-venv/bin/python ]; then \
+      cp -a /dependency-opt/neptune-venv /opt/neptune-venv \
+      && /opt/neptune-venv/bin/pip install --no-index -r /tmp/requirements.txt; \
+    else \
+      python3 -m venv --system-site-packages /opt/neptune-venv \
+      && /opt/neptune-venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt; \
+    fi
 COPY . /opt/neptune
 RUN . /opt/ros/jazzy/setup.sh && . /opt/stonefish_ws/install/setup.sh \
     && cd /opt/neptune && colcon build --base-paths src/neptune_sim src/neptune_perception \

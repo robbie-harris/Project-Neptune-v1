@@ -39,3 +39,19 @@ See [[Orientation Deployment Results]] for completed three-run held-out results,
 
 
 [[Tank Overview]] adds a fixed live tank camera below the forward GUI feed, 13 pt telemetry text and screen-aware scrolling. Actual camera/GUI checks are recorded in that note.
+
+- [[Inspection Objects and Optics]] — three-class implementation and native optical experiment status.
+
+- [[MarinaPipe and Real Deployment]] — real-image training roadmap and dataset assessment.
+
+- [[Inspection Detector Results]] — trained three-class accuracy, pipe regression and live measurements.
+
+- [[Automated Inspection Mission]] — GUI start/stop, sensor navigation, visual confirmation and scan/return sequence.
+
+- [[Faster Mission and View Priority]] — wider and faster inspection path, shallow lateral passes, independent view switches and measured rates.
+
+- [[One Minute Mission Experiment]]
+
+- [[Autonomous Power Control]]
+
+- [[Perception_handoff_v1]] — Windows integration and secure extraction guide

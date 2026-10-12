@@ -14,7 +14,7 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose
-from .backends import RoboflowBackend, annotate
+from .backends import RoboflowBackend, annotate, CLASSES, validate_model_names
 
 
 class PipeDetector(Node):
@@ -26,6 +26,7 @@ class PipeDetector(Node):
         self.stop=threading.Event(); self.ready=threading.Event()
         self.model=None; self.status={'state':'loading','latency_ms':None,'detections':[]}
         self.boxes=self.create_publisher(Detection2DArray,'/neptune/perception/pipe_detections',10)
+        self.objects=self.create_publisher(Detection2DArray,'/neptune/perception/object_detections',10)
         self.image=self.create_publisher(Image,'/neptune/perception/annotated',10)
         self.health=self.create_publisher(String,'/neptune/perception/status',10)
         self.create_subscription(Image,self.get_parameter('image_topic').value,self.receive,10)
@@ -59,7 +60,7 @@ class PipeDetector(Node):
                 if self.inference_device.type=='cpu':
                     torch.set_num_threads(max(1,self.get_parameter('cpu_threads').value))
                 self.model=YOLO(str(weights))
-                if self.model.names != {0:'pipe'}: raise ValueError('Weights must have exactly one class named pipe; COCO weights cannot detect this class.')
+                validate_model_names(self.model.names)
                 self.weights_sha256=hashlib.sha256(weights.read_bytes()).hexdigest()
             else:
                 raise ValueError('Unknown detector backend')
@@ -87,7 +88,7 @@ class PipeDetector(Node):
                     result=self.model.predict(frame,conf=self.get_parameter('confidence').value,
                         imgsz=self.get_parameter('imgsz').value,device=self.inference_device,verbose=False)[0]
                     latency=(time.perf_counter()-start)*1000
-                    items=[{'class':'pipe','confidence':float(box.conf[0]),'bbox':list(map(float,box.xyxy[0].cpu().tolist()))} for box in result.boxes]
+                    items=[{'class':self.model.names[int(box.cls[0])],'confidence':float(box.conf[0]),'bbox':list(map(float,box.xyxy[0].cpu().tolist()))} for box in result.boxes]
                     rendered=result.plot()
                 arr=Detection2DArray(); arr.header=copy.deepcopy(msg.header)
                 for item in items:
@@ -95,10 +96,13 @@ class PipeDetector(Node):
                     d=Detection2D(); d.header=copy.deepcopy(msg.header)
                     d.bbox.center.position.x=(x1+x2)/2; d.bbox.center.position.y=(y1+y2)/2
                     d.bbox.size_x=x2-x1; d.bbox.size_y=y2-y1
-                    h=ObjectHypothesisWithPose(); h.hypothesis.class_id='pipe'; h.hypothesis.score=score
+                    h=ObjectHypothesisWithPose(); h.hypothesis.class_id=item['class']; h.hypothesis.score=score
                     d.results.append(h); arr.detections.append(d)
                 out=self.cv.cv2_to_imgmsg(rendered,encoding='bgr8'); out.header=copy.deepcopy(msg.header)
-                self.boxes.publish(arr); self.image.publish(out)
+                self.objects.publish(arr)
+                pipes=Detection2DArray(); pipes.header=copy.deepcopy(msg.header)
+                pipes.detections=[d for d in arr.detections if d.results[0].hypothesis.class_id=='pipe']
+                self.boxes.publish(pipes); self.image.publish(out)
                 with self.lock: self.status={'state':'ready','latency_ms':latency,'detections':items,
                     'stamp':{'sec':msg.header.stamp.sec,'nanosec':msg.header.stamp.nanosec},
                     'backend':backend,'model_id':self.get_parameter('model_id').value if backend=='roboflow' else None,

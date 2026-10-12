@@ -1,0 +1,12 @@
+ARG NEPTUNE_BASE=neptune-perception:latest
+FROM ${NEPTUNE_BASE}
+COPY src/tools/patch_views.py /tmp/patch_views.py
+RUN python3 /tmp/patch_views.py /opt/stonefish /opt/stonefish_ws/src/stonefish_ros2 \
+    && cmake --build /opt/stonefish/build -j4 && cmake --install /opt/stonefish/build \
+    && . /opt/ros/jazzy/setup.sh && cd /opt/stonefish_ws \
+    && colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+COPY src/ /opt/neptune/src/
+COPY Simulation/config/ /opt/neptune/Simulation/config/
+RUN . /opt/ros/jazzy/setup.sh && . /opt/stonefish_ws/install/setup.sh \
+    && cd /opt/neptune && colcon build --base-paths src/neptune_sim src/neptune_perception \
+    && chmod +x src/tools/*.sh

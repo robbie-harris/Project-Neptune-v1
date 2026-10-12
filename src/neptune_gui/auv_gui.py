@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native Mac GUI for the pool AUV: drive the thrusters, see the camera and YOLO pipe detections.
+"""Native Mac GUI for the pool AUV: drive the thrusters, see the camera and YOLO inspection detections.
 
 Connects to the bridge in the container (localhost:9090). Standard library only (tkinter).
 Hold W/S forward/back, A/D turn left/right, R/F up/down. Release cuts thrust; Space stops all.
@@ -99,7 +99,7 @@ class App:
         self.last_send = 0.0
         self.fps_report_at = 0.0
 
-        root.title("Neptune — Pipe Perception")
+        root.title("Neptune — Inspection Perception")
         root.configure(bg=BG)
         root.resizable(False, False)
 
@@ -127,9 +127,9 @@ class App:
         right = tk.Frame(content, bg=BG)
         right.grid(row=1, column=1, rowspan=2, padx=(0, 10), pady=6, sticky="n")
 
-        tk.Label(right, text="PIPE DETECTION", bg=BG, fg=ACCENT, font=("Helvetica", 10, "bold")).pack(anchor="w")
+        tk.Label(right, text="OBJECT DETECTIONS", bg=BG, fg=ACCENT, font=("Helvetica", 10, "bold")).pack(anchor="w")
         self.pose_vars = {}
-        for key, label in [("state", "Model"), ("visible", "Pipe"), ("confidence", "Confidence"),
+        for key, label in [("state", "Model"), ("visible", "Objects"), ("confidence", "Confidence"),
                            ("bbox", "Box pixels"), ("latency", "Inference"), ("fps", "Feed FPS"), ("sensors", "Sensors"), ("reason", "Status")]:
             row = tk.Frame(right, bg=BG)
             row.pack(fill="x")
@@ -138,18 +138,53 @@ class App:
             self.pose_vars[key] = value
             tk.Label(row, textvariable=value, bg=BG, fg=FG, wraplength=280, justify="left").pack(side="left")
         self.preview = tk.StringVar(value=options.preview)
+        self.view_vars={'camera':tk.BooleanVar(value=True),'overview':tk.BooleanVar(value=True)}
+        self.pending_views=None
+        for key,label in [('camera','AUV camera view'),('overview','Tank overview')]:
+            tk.Checkbutton(right,text=label,variable=self.view_vars[key],bg=BG,fg=FG,selectcolor=BG,command=self.set_views).pack(anchor='w')
+        self.views_text=tk.StringVar(value='Views: waiting for simulator')
+        tk.Label(right,textvariable=self.views_text,bg=BG,fg=FG,wraplength=440,justify='left').pack(anchor='w')
         for value in ("raw", "annotated"):
             tk.Radiobutton(right, text=value.title(), variable=self.preview, value=value,
                 bg=BG, fg=FG, selectcolor=BG, command=lambda: self.link.send_preview(self.preview.get())).pack(anchor="w")
         self.realistic = tk.BooleanVar(value=False)
         tk.Checkbutton(right,text='Realistic sensor / camera errors',variable=self.realistic,
                        bg=BG,fg=FG,selectcolor=BG,command=self.set_errors).pack(anchor='w')
+        self.pending_optics=None
+        self.optics_vars={'natural':tk.BooleanVar(value=True),'lamps':tk.BooleanVar(value=True),
+                          'water':tk.StringVar(value='clear'),'particles':tk.BooleanVar(value=False)}
+        tk.Label(right,text='UNDERWATER OPTICS',bg=BG,fg=ACCENT,font=('Helvetica',12,'bold')).pack(anchor='w',pady=(8,0))
+        for key,label in [('natural','Natural lighting'),('lamps','AUV lights'),('particles','Suspended particles')]:
+            tk.Checkbutton(right,text=label,variable=self.optics_vars[key],bg=BG,fg=FG,
+                           selectcolor=BG,command=self.set_optics).pack(anchor='w')
+        water=tk.OptionMenu(right,self.optics_vars['water'],'clear','moderate','turbid',command=lambda _:self.set_optics())
+        water.config(bg=BG,fg=FG,highlightthickness=0); water.pack(anchor='w')
+        self.optics_text=tk.StringVar(value='Optics: waiting for simulator')
+        tk.Label(right,textvariable=self.optics_text,bg=BG,fg=FG,wraplength=440,justify='left').pack(anchor='w')
+        self.objects_text=tk.StringVar(value='No detections')
+        tk.Label(right,textvariable=self.objects_text,bg=BG,fg=FG,wraplength=440,justify='left',font=('Menlo',12)).pack(anchor='w')
         tk.Label(right,text='TELEMETRY · ESTIMATE vs GROUND TRUTH',bg=BG,fg=ACCENT,font=('Helvetica',12,'bold')).pack(anchor='w',pady=(8,0))
         self.telemetry_text=tk.StringVar(value='Waiting for telemetry')
         tk.Label(right,textvariable=self.telemetry_text,bg=BG,fg=FG,justify='left',anchor='w',font=('Menlo',13),wraplength=440).pack(anchor='w')
         tk.Label(right,text='Pose score: 100% = match; 0% at ≥1 m or ≥15° error',bg=BG,fg='#9aa',font=('Helvetica',9),wraplength=320).pack(anchor='w')
         self.return_button=tk.Button(right,text='Return to spawn',command=self.return_to_spawn,highlightbackground=BG,state='disabled')
         self.return_button.pack(anchor='w',pady=(4,0))
+        self.mission_text=tk.StringVar(value='Inspection: idle')
+        tk.Label(right,textvariable=self.mission_text,bg=BG,fg=FG,wraplength=440,justify='left',font=('Menlo',12)).pack(anchor='w')
+        self.mission_button=tk.Button(right,text='Start mapped inspection',command=self.start_inspection,highlightbackground=BG,state='disabled')
+        self.mission_button.pack(anchor='w',pady=(4,0))
+        self.autonomous_power=tk.DoubleVar(value=100.)
+        self.power_applied=None;self.pending_power=None
+        self.power_text=tk.StringVar(value='Autonomous power: waiting for simulator')
+        self.autonomous_power_slider=tk.Scale(right,from_=20,to=100,resolution=5,orient='horizontal',
+            label='Autonomous power (%)',variable=self.autonomous_power,bg=BG,fg=FG,highlightthickness=0,
+            length=260,command=self.set_autonomous_power)
+        self.autonomous_power_slider.pack(anchor='w')
+        tk.Label(right,textvariable=self.power_text,bg=BG,fg=FG,wraplength=440,justify='left').pack(anchor='w')
+        tk.Label(right,text='Adjusts inspection/return speed and translation thrust.\nDepth/yaw stabilization stays active. Lower settings may hit the 60 s cutoff.',
+            bg=BG,fg='#9aa',wraplength=440,justify='left').pack(anchor='w')
+
+        tk.Button(right,text='Stop mission',command=self.stop,highlightbackground=BG).pack(anchor='w')
 
         tk.Label(right, text="THRUSTER COMMANDS", bg=BG, fg=ACCENT, font=("Helvetica", 10, "bold")).pack(anchor="w", pady=(12, 2))
         tk.Label(right, text="Horizontal + = forward; heave + = up", bg=BG, fg=FG).pack(anchor='w')
@@ -203,6 +238,27 @@ class App:
         self.link.send_cmd([0., 0., 0.])
         self.link.send_payload({'mission':'cancel'})
 
+    def set_autonomous_power(self,value):
+        percent=float(value)
+        if self.power_applied is not None and abs(percent-self.power_applied)<.1 and self.pending_power is None:return
+        self.pending_power=percent
+        self.link.send_payload({'autonomous_power_percent':percent})
+        self.power_text.set(f'Autonomous power: {percent:.0f}% pending')
+
+    def set_optics(self):
+        self.pending_optics={k:v.get() for k,v in self.optics_vars.items()}
+        self.link.send_payload({'optics':self.pending_optics})
+        self.optics_text.set('Optics: pending confirmation')
+
+    def set_views(self):
+        self.pending_views={k:v.get() for k,v in self.view_vars.items()}
+        self.link.send_payload({'views':self.pending_views})
+        self.views_text.set('Views: pending renderer confirmation')
+        for key,canvas in [('camera',self.canvas),('overview',self.overview_canvas)]:
+            if not self.pending_views[key]:
+                canvas.delete('all');canvas.create_text(320,240 if key=='camera' else 120,text='View off',fill='#888')
+        if not self.pending_views['camera']:self.frame_times.clear();self.pose_vars['fps'].set('off')
+
     def set_errors(self):
         selected=self.realistic.get()
         self.stop()
@@ -211,6 +267,10 @@ class App:
     def return_to_spawn(self):
         self.stop()
         self.link.send_payload({'mission':'return'})
+
+    def start_inspection(self):
+        self.stop()
+        self.link.send_payload({'mission':'inspect'})
 
     def check_focus(self):
         if self.root.focus_displayof() is None:
@@ -280,6 +340,7 @@ class App:
         if "state" in msg:
             self.set_pose(msg["state"])
         elif 'overview' in msg:
+            if not self.view_vars['overview'].get():return
             try:
                 self.overview_photo=tk.PhotoImage(data=msg['overview'])
                 self.overview_canvas.delete('all')
@@ -291,6 +352,7 @@ class App:
             except tk.TclError as exc:
                 logging.error('Tank overview failed: %s',exc)
         elif "img" in msg:
+            if not self.view_vars['camera'].get():return
             try:
                 self.photo = tk.PhotoImage(data=msg["img"])
                 self.canvas.delete("all")
@@ -316,10 +378,52 @@ class App:
             for value in v.values(): value.set("--")
             self.telemetry_text.set('Telemetry unavailable')
             self.return_button.config(state='disabled')
+            self.mission_button.config(state='disabled')
+            self.mission_text.set('Inspection: telemetry unavailable')
             return
         self.applied_command = st.get('thrusters', [0., 0., 0.])
         self.realistic.set(st.get('realistic',False))
+        optics=st.get('optics',{})
+        views=st.get('views',{})
+        confirmed_views=views.get('applied')
+        self.views_text.set('Views: '+views.get('state','unavailable')+(' · '+views['reason'] if views.get('reason') else ''))
+        if views.get('state')=='applied' and confirmed_views and (self.pending_views is None or confirmed_views==self.pending_views):
+            self.pending_views=None
+            for key,value in confirmed_views.items():self.view_vars[key].set(value)
+            active=[k for k,v in confirmed_views.items() if v]
+            self.views_text.set('Views: applied · '+('priority '+active[0] if len(active)==1 else 'both active' if active else 'both off; perception remains active'))
+        confirmed=optics.get('applied')
+        text='Optics: '+optics.get('state','unavailable')
+        if confirmed:
+            text+=f" · natural {'on' if confirmed['natural'] else 'off'}, lamps {'on' if confirmed['lamps'] else 'off'}, {confirmed['water']}, particles {'on' if confirmed['particles'] else 'off'}"
+            if optics.get('state')=='applied' and (self.pending_optics is None or confirmed==self.pending_optics):
+                self.pending_optics=None
+                for k,val in confirmed.items(): self.optics_vars[k].set(val)
+        if self.pending_optics is not None and optics.get('state')=='applied': text='Optics: pending; currently '+text.split(' · ',1)[-1]
+        if optics.get('reason'): text+=' · '+optics['reason']
+        self.optics_text.set(text)
         telemetry=st.get('telemetry',{})
+        percent=telemetry.get('autonomous_power_percent')
+        if isinstance(percent,(int,float)) and math.isfinite(percent) and 20<=percent<=100:
+            self.power_applied=float(percent)
+            if self.pending_power is not None and abs(percent-self.pending_power)<.1:self.pending_power=None
+            if self.pending_power is None:
+                self.autonomous_power.set(percent)
+                self.power_text.set(f'Autonomous power: {percent:.0f}% applied')
+            else:self.power_text.set(f'Autonomous power: {self.pending_power:.0f}% pending · applied {percent:.0f}%')
+        else:self.power_text.set('Autonomous power: telemetry unavailable')
+        inspection=telemetry.get('inspection',{})
+        active=telemetry.get('autonomy',telemetry.get('return',{})).get('active',False)
+        target=inspection.get('target') or {}
+        mission_label='Inspection: '+inspection.get('state','unavailable')
+        hold=inspection.get('perception_hold',{})
+        if hold.get('active'):mission_label+=' · PAUSED: '+hold.get('reason','Waiting for perception')
+        if inspection.get('state')=='returning':mission_label+=' · return to spawn'
+        elif inspection.get('active'):mission_label+=f" · {inspection.get('waypoint',0)+1}/{inspection.get('total_waypoints',0)} · {target.get('label','inspection')}"
+        if inspection.get('deadline_s')==60:mission_label+=' · 60 s limit'
+        if inspection.get('reason'):mission_label+=' · '+inspection['reason']
+        self.mission_text.set(mission_label)
+        self.mission_button.config(state='normal' if telemetry.get('ready') and inspection.get('can_start') and not active else 'disabled')
         self.return_button.config(state='normal' if telemetry.get('ready') and not telemetry.get('return',{}).get('active') else 'disabled')
         est=telemetry.get('estimated',{}); truth=telemetry.get('ground_truth',{}); comparison=telemetry.get('comparison',{})
         fmt=lambda values: ', '.join(f'{x:.2f}' for x in values) if values else '--'
@@ -344,6 +448,7 @@ class App:
             logging.info("Detector state: %s; %s", state, detector.get("reason", ""))
             self.reported_detector_state = state
         boxes = detector.get("detections", [])
+        self.objects_text.set('\n'.join(f"{d['class']}: {d['confidence']:.1%} · {[round(x) for x in d['bbox']]}" for d in boxes) or 'No detections')
         best = max(boxes, key=lambda box: box["confidence"], default=None)
         v["state"].set(detector.get("state", "unavailable"))
         v["visible"].set("Detected" if best else "Not visible")
@@ -354,7 +459,7 @@ class App:
         v["sensors"].set(" | ".join(f"{k}: {'OK' if ok else 'stale'}" for k, ok in st.get("sensors", {}).items()))
         v["reason"].set("Camera stale" if detector.get("camera_stale") else detector.get("reason", ""))
         if best and not self.detection_reported:
-            logging.info("Pipe displayed: confidence=%s bbox=%s latency=%s", v["confidence"].get(), v["bbox"].get(), v["latency"].get())
+            logging.info("Object displayed: confidence=%s bbox=%s latency=%s", v["confidence"].get(), v["bbox"].get(), v["latency"].get())
             self.detection_reported = True
         sensors = st.get("sensors", {})
         if not self.sensors_reported and all(sensors.get(k, False) for k in ["raw", "right", "down", "sonar", "imu", "pressure", "dvl"]):

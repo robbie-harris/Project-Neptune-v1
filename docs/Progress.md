@@ -92,3 +92,39 @@ The final packaged return guard also requires passive roll/pitch to settle. Repe
 
 
 [[Tank Overview]] adds a fixed live tank camera below the forward GUI feed, 13 pt telemetry text and screen-aware scrolling. Actual camera/GUI checks are recorded in that note.
+
+## 2026-10-10 — Inspection objects implementation
+
+See [[Inspection Objects and Optics]] for planned gates versus actual implementation and native-render verification. Public Roboflow project created; multiclass training has not started.
+
+## 2026-10-11 — Reduced multiclass dataset and cloud training
+
+Approved reduction completed and sealed: **6,530 images / 653 viewpoint groups**, split **4,570 / 980 / 980**. All uploads and annotations confirmed; complete Roboflow COCO export passed pixel-encoding, split, class and box verification. One **YOLO11n / 100 requested epochs** MCP job is **running** on version 2, training ID `cf8d962d68e32878e60b`. See [[Inspection Objects and Optics]] for hashes and measured checks. Cloud training continues independently of the laptop. Model accuracy, runtime evaluation and normal-startup promotion remain pending.
+
+The job subsequently finished. [[Inspection Detector Results]] records completed local validation/test, original pipe regression and matched full-rig runtime measurements. Clear/moderate test recall: **99.26% pipe / 95.70% valve / 100% flange**; absent-frame FPR **2.78%**. Live ideal-mode ROS checks and latency gate passed. The original pipe test regressed to **93.78%**, blocking normal promotion. Explicit `run-inspection.sh --candidate` enables the integrated experiment; existing startup remains unchanged. Turbid recall **13–18%** and real-world generalization remain limitations.
+
+## GUI automated inspection mission
+
+[[Automated Inspection Mission]] adds GUI start/stop, nearest mapped pipe-end approach, correct-class component confirmations, intermediate lateral scan stops and sensor-only return. A complete Stonefish trial passed all nine visits and returned in 472.04 s with **2.26 cm** true spawn error and **2.60°** heading error. Actual GUI disconnect cancelled and zeroed thrust. Final guard tests and native GUI checks passed; **59 host tests passed, four ROS-only skipped**. Mission navigation uses the configured scene map and IMU/DVL/pressure; ground truth remains evaluation-only. Full noisy/turbid mission performance remains unverified.
+
+Perception interruptions now cause a bounded zero-thrust recovery hold instead of immediate permanent cancellation. Raw camera and completed inference freshness are measured independently; the same waypoint resumes only with fresh streams, and persistent failure cancels after 25 s. Actual inference-server pause/unpause tests passed all five recovery checks. **63 host tests passed, four ROS-only skipped**. See [[Automated Inspection Mission]] for the measured fault-injection outcome and limitations.
+
+### 2026-10-11 — Fast mission and independent view priority
+
+Implemented wider/faster bounded inspection and independent AUV/overview display toggles with native render priority. Five-stop three-thruster run completed in 293.10 s, returning within 2.76 cm. This did not satisfy the later one-minute requirement.
+
+User approved two lateral thrusters for an experimental rig. After documented failed controller trials, four-target inspection plus return passed in 37.28 s and 36.92 s with both feeds, and 35.93 s with AUV display hidden. True spawn error approximately 5.2–5.4 cm. 78 host tests passed (four ROS-only skipped); Tk controls, live operator stop, manual override, heartbeat and disconnect checks passed, with native five-motor zero confirmed. Final packaged orientation gate verification and stopped-state confirmation follow. See [[One Minute Mission Experiment]] and [[Faster Mission and View Priority]].
+
+Final packaged fast rig passed **35.63 s**, **5.18 cm** return error with orientation gate. Verified image tagged for startup; rollback images preserved. Simulator and inference stopped after controlled validation. No push or model retraining performed in this iteration.
+
+### 2026-10-11 — Autonomous power slider
+
+Added live 20–100% translation power setting for inspection and return, with controller confirmation and unchanged stabilization/deadline. 87 host tests passed (four ROS-only skipped), native GUI checks passed. Actual 100→60→100 mission completed in 36.91 s, 4.83 cm return error. Reset simulator to spawn and reopened GUI; inference remains running. See [[Autonomous Power Control]].
+
+### 2026-10-11 — 1.7 m standoff
+
+Fast rig scan standoff changed to 1.7 m body-origin-to-pipe-axis (camera 1.08 m). 30 targeted tests passed. Full clear/ideal/100% mission passed in 43.50 s, 3.46 cm return error. Reset to spawn and restore user-selected 70% power, realistic errors and optical/display settings.
+
+### 2026-10-12 — Perception handoff v1 and repository delivery
+
+Created [[Perception_handoff_v1]] with extraction manifest for detector/GUI/bridge, thruster configurations, fixture geometry, native optics/view patches, sensors/telemetry and optional mission. Documented existing-vehicle mapping, authorized model access, excluded secrets/data/weights, Windows WSL2/AMD64 build/start instructions and acceptance/rollback requirements. Registry inspection verified the committed inference digest is ARM64 and identified the companion AMD64 digest. Windows execution is explicitly untested. Host verification passed 87 tests (four ROS-only skipped). Simulator/inference remain stopped. All source/assets/configuration/documentation are being delivered together to Perception; generated artifacts remain ignored.

@@ -11,7 +11,7 @@ import time
 import sys
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'src/neptune_perception'))
-from neptune_perception.backends import RoboflowBackend
+from neptune_perception.backends import RoboflowBackend, validate_model_names
 os.environ.setdefault('YOLO_CONFIG_DIR',str(ROOT/'outputs/ultralytics'))
 import cv2
 import numpy as np
@@ -61,10 +61,11 @@ def predictions(model,data,records,device):
             truths.append([(cx-w/2)*width,(cy-h/2)*height,(cx+w/2)*width,(cy+h/2)*height])
         start=time.perf_counter()
         if isinstance(model,RoboflowBackend):
-            items=model.infer(frame,.01); boxes=[d['bbox'] for d in items]; scores=[d['confidence'] for d in items]
+            items=[d for d in model.infer(frame,.01) if d['class']=='pipe']; boxes=[d['bbox'] for d in items]; scores=[d['confidence'] for d in items]
         else:
             result=model.predict(frame,imgsz=640,conf=.01,device=device,verbose=False)[0]
-            boxes=result.boxes.xyxy.cpu().tolist(); scores=result.boxes.conf.cpu().tolist()
+            pipe_boxes=result.boxes[[model.names[int(box.cls[0])]=='pipe' for box in result.boxes]]
+            boxes=pipe_boxes.xyxy.cpu().tolist(); scores=pipe_boxes.conf.cpu().tolist()
             if device.type=='mps': torch.mps.synchronize()
         latency=(time.perf_counter()-start)*1000; xyz=r.get('requested_xyz')
         distance=float(np.linalg.norm(np.asarray(xyz)-[4.4,0,1.5])) if xyz is not None else None
@@ -89,7 +90,7 @@ def main():
         model.infer(cv2.imread(str(args.data/records[0]['image'])),.01)
     else:
         model=YOLO(str(args.weights))
-        if model.names!={0:'pipe'}: p.error('Expected single pipe class')
+        validate_model_names(model.names)
         model.predict(str(args.data/records[0]['image']),device=device,imgsz=640,verbose=False)
     rows=predictions(model,args.data,records,device); confidence=args.confidence; orientation=any(record.get('angle_bin') is not None for record in records)
     if args.select_confidence:

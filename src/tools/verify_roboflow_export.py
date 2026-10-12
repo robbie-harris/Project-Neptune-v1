@@ -18,6 +18,8 @@ def verify(data, archive):
     data, archive = Path(data), Path(archive)
     manifest = data / 'manifest.jsonl'
     records = {r['id']: r for r in map(json.loads, manifest.read_text().splitlines())}
+    inspection=bool(records) and next(iter(records.values())).get('schema')=='inspection-v1'
+    expected_classes={'pipe','valve','flange'} if inspection else {'pipe'}
     seen = set(); counts = Counter(); negatives = Counter()
     exact_bytes = 0; reencoded = 0; maximum_pixel_mae = 0.0; maximum_box_error = 0.0; reproduced_jpeg = 0
     with zipfile.ZipFile(archive) as z:
@@ -30,32 +32,35 @@ def verify(data, archive):
             if split not in {'train', 'val', 'test'}:
                 raise ValueError('Unexpected export split: ' + str(folder))
             coco = json.loads(z.read(name))
-            pipes = {c['id'] for c in coco['categories'] if c['name'].lower() == 'pipe'}
-            if not pipes:
-                raise ValueError('Export has no pipe class')
+            categories={c['id']:c['name'].lower() for c in coco['categories'] if c['name'].lower() in expected_classes}
+            if set(categories.values())!=expected_classes:
+                raise ValueError('Export does not contain the required class schema')
             annotations = defaultdict(list)
             for a in coco['annotations']:
-                if a['category_id'] not in pipes:
+                if a['category_id'] not in categories:
                     raise ValueError('Unexpected annotated class')
                 annotations[a['image_id']].append(a)
             for image in coco['images']:
-                match = re.match(r'(o\d+_v\d+)', Path(image['file_name']).name)
+                match = re.match(r'([oi]\d+_v\d+)', Path(image['file_name']).name)
                 if not match or match[1] not in records or match[1] in seen:
                     raise ValueError('Unknown or repeated exported image: ' + image['file_name'])
                 key = match[1]; r = records[key]; seen.add(key); counts[split] += 1
                 if split != r['split'] or (image['width'], image['height']) != (r['width'], r['height']):
                     raise ValueError('Split or dimensions differ: ' + key)
                 boxes = annotations.pop(image['id'], [])
-                if len(boxes) != int(r['bbox'] is not None):
-                    raise ValueError('Positive/negative annotation differs: ' + key)
-                if boxes:
-                    x, y, w, h = boxes[0]['bbox']
-                    error = max(abs(a-b) for a,b in zip((x,y,x+w,y+h), r['bbox']))
-                    maximum_box_error = max(maximum_box_error, error)
-                    if error > 1.01:
-                        raise ValueError('Box differs by more than one pixel: ' + key)
-                else:
-                    negatives[split] += 1
+                expected=r['boxes'] if inspection else ([{'class':'pipe','bbox':r['bbox']}] if r['bbox'] is not None else [])
+                if len(boxes)!=len(expected): raise ValueError('Annotation count differs: '+key)
+                available=list(expected)
+                for box in boxes:
+                    candidates=[b for b in available if b['class']==categories[box['category_id']]]
+                    if not candidates: raise ValueError('Class differs: '+key)
+                    x,y,w,h=box['bbox']; xyxy=(x,y,x+w,y+h)
+                    match=min(candidates,key=lambda b:max(abs(a-c) for a,c in zip(xyxy,b['bbox'])))
+                    error=max(abs(a-c) for a,c in zip(xyxy,match['bbox']))
+                    maximum_box_error=max(maximum_box_error,error)
+                    if error>1.01: raise ValueError('Box differs by more than one pixel: '+key)
+                    available.remove(match)
+                if not boxes: negatives[split]+=1
                 raw = z.read(str(folder / image['file_name']))
                 source = (data / r['image']).read_bytes()
                 if hashlib.sha256(source).hexdigest() != r['sha256']:

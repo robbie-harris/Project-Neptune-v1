@@ -11,3 +11,8 @@ log
 
 .venv*
 .secrets
+
+.env
+.env.*
+!.env.example
+.pytest_cache

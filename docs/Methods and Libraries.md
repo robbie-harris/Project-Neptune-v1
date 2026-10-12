@@ -61,3 +61,7 @@ Optional Roboflow SDK 1.7.1 is installed in isolated `.venv-roboflow`; exact res
 ## Local Inference integration — 2026-10-10
 
 User selected a local deployment path and supplied a key. Two configurable backends are implemented; credentials are ignored and mounted read-only. Official SDK/CLI 1.7.4 are isolated from ROS NumPy; ROS calls the official REST API with lossless pixels and original timestamps. New unit checks and ROS contract integration passed. Official ARM64 server image download is pending; candidate accuracy/runtime remain unmeasured. See [[Local Roboflow Inference]].
+
+## Inspection fixture generation
+
+Trimesh **4.6.8**, offline only, adds cylinders, annuli, torus, boxes and concatenation for valve/flange geometry. `config/requirements-mesh.txt` pins NumPy **1.26.4**. Export explicit OBJ vertex normals for the pinned Stonefish loader. Native shader optical multiplier preserves the existing scattering algorithms; no new image-enhancement model or custom underwater-render algorithm is introduced. See [[Inspection Objects and Optics]].

@@ -1,0 +1,2 @@
+# Separate SDK environment; do not install into the ROS/Ultralytics runtime.
+roboflow==1.7.1

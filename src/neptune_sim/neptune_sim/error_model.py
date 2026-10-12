@@ -28,8 +28,8 @@ class ErrorModel:
         frame=cv2.GaussianBlur(frame,(cfg['blur_kernel'],cfg['blur_kernel']),0).astype(np.float32)
         length=min(cfg['max_motion_blur_px'],max(1,int(w/(2*np.tan(np.deg2rad(40)))*angular_speed*cfg['exposure_s'])))
         if length>1: frame=cv2.filter2D(frame,-1,np.ones((1,length),np.float32)/length)
-        frame[:,:,2]*=cfg['red_gain']
-        frame=frame*cfg['contrast']*(1+cfg['exposure_variation']*np.sin(stamp*.7))+cfg['backscatter']
+        # Water absorption/scattering is rendered by Stonefish, not added here.
+        frame*=1+cfg['exposure_variation']*np.sin(stamp*.7)
         frame+=self.rng.standard_normal(frame.shape,dtype=np.float32)*cfg['pixel_sigma']
         return np.clip(frame,0,255).astype(np.uint8)
 

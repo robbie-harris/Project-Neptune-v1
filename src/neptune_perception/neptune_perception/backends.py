@@ -10,6 +10,16 @@ from urllib.error import HTTPError, URLError
 import cv2
 
 
+CLASSES = ('pipe', 'valve', 'flange')
+COLORS = {'pipe': (0, 255, 0), 'valve': (255, 180, 0), 'flange': (220, 80, 255)}
+
+def validate_model_names(names):
+    if not isinstance(names,dict) or set(names)!=set(range(len(names))):
+        raise ValueError('Model class IDs must be contiguous')
+    if len(set(names.values()))!=len(names) or set(names.values()) not in ({'pipe'},set(CLASSES)):
+        raise ValueError('Weights must match the pipe-only or Neptune three-class schema')
+    return names
+
 def decode_predictions(response, width, height):
     if isinstance(response, list):
         if len(response) != 1:
@@ -22,14 +32,14 @@ def decode_predictions(response, width, height):
         raise ValueError('Prediction coordinates do not match input resolution')
     result = []
     for p in response['predictions']:
-        if p.get('class') != 'pipe':
-            raise ValueError('Unexpected model class; expected pipe only')
+        if p.get('class') not in CLASSES:
+            raise ValueError('Unexpected model class; expected pipe, valve or flange')
         x, y, w, h, score = [float(p[k]) for k in ('x', 'y', 'width', 'height', 'confidence')]
         if not all(math.isfinite(v) for v in (x,y,w,h,score)) or w <= 0 or h <= 0 or not 0 <= score <= 1:
             raise ValueError('Invalid detection coordinates/confidence')
         box = [max(0., x-w/2), max(0., y-h/2), min(float(width), x+w/2), min(float(height), y+h/2)]
         if box[2] > box[0] and box[3] > box[1]:
-            result.append({'class': 'pipe', 'confidence': score, 'bbox': box})
+            result.append({'class': p['class'], 'confidence': score, 'bbox': box})
     return result
 
 
@@ -37,8 +47,9 @@ def annotate(frame, detections):
     output = frame.copy()
     for d in detections:
         x1,y1,x2,y2 = map(round, d['bbox'])
-        cv2.rectangle(output, (x1,y1), (x2,y2), (0,255,0), 2)
-        cv2.putText(output, f"pipe {d['confidence']:.2f}", (x1,max(15,y1-5)), cv2.FONT_HERSHEY_SIMPLEX, .5, (0,255,0), 1)
+        color = COLORS[d['class']]
+        cv2.rectangle(output, (x1,y1), (x2,y2), color, 2)
+        cv2.putText(output, f"{d['class']} {d['confidence']:.2f}", (x1,max(15,y1-5)), cv2.FONT_HERSHEY_SIMPLEX, .5, color, 1)
     return output
 
 

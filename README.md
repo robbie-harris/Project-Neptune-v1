@@ -85,3 +85,54 @@ The GUI includes a realistic-error checkbox, estimated/ground-truth telemetry wi
 
 
 The GUI also includes a fixed live tank overview below the forward feed, larger telemetry text, and a scrollable camera/telemetry area. See [tank overview](docs/Tank%20Overview.md).
+
+### Inspection objects and optical experiments
+
+The inspection scene adds a valve and bolted flange to the pipe. Build with
+`bash src/tools/run.sh --build`, start the local server with
+`bash src/tools/inference-server.sh`, and launch the scene with
+`bash src/tools/run-inspection.sh`. Until multiclass acceptance passes, this uses
+the previous pipe-only model; fixtures will not be detected by that model.
+The GUI exposes natural illumination, AUV lamps, water preset and suspended
+particles, with confirmed/pending/error status. See
+[Inspection Objects and Optics](docs/Inspection%20Objects%20and%20Optics.md) for
+capture, training status, class definitions and acceptance gates.
+
+The trained three-class model is available explicitly with
+`bash src/tools/run-inspection.sh --candidate` after starting the inference server.
+It passed the new clear/moderate multiclass test, but regressed on the original
+pipe orientation test; normal startup remains unchanged. See
+[Inspection Detector Results](docs/Inspection%20Detector%20Results.md).
+
+In the inspection scene, the GUI's **Start mapped inspection** runs a sensor-guided
+pipe-end approach, visually confirmed valve/flange visits, lateral scan stops,
+and return to spawn. **Stop mission** or Space cancels it. Use `--candidate` for
+the three-class detector. This uses the configured tank map, not a pipe map inferred
+from bounding boxes. See [Automated Inspection Mission](docs/Automated%20Inspection%20Mission.md).
+
+The GUI also provides independent **AUV camera view** / **Tank overview** switches.
+The active view receives priority; hiding the AUV view preserves mission perception.
+Inspection now uses a wider 3 m body standoff, fewer stops and shallow diagonal
+forward/reverse transfers. See [Faster Mission and View Priority](docs/Faster%20Mission%20and%20View%20Priority.md)
+for configured speed, reduced auxiliary rates in single-view profiles and measured results.
+
+The optional five-thruster experimental fast rig is available with
+`bash src/tools/run-inspection.sh --fast`, followed by `bash src/tools/gui.sh`
+(start the local inference server first). It holds the pipe-facing heading during
+sideways scans and applies a **60-second full-mission deadline**, including return.
+At the current **1.7 m body standoff**, a complete run took **43.5 seconds**,
+returning within **3.5 cm** in clear, ideal-sensor conditions at 100% power. It changes the simulated propulsion
+layout; the three-thruster rig remains available with `--candidate`.
+See [One Minute Mission Experiment](docs/One%20Minute%20Mission%20Experiment.md)
+for exact settings, failed trials, successful repeats, and hardware assumptions.
+
+Use **Autonomous power (%)** beneath **Start mapped inspection** to adjust
+inspection and return speed/thrust from 20–100%, including during a mission.
+Yaw/depth stabilization stays active. Lower settings may reach the unchanged
+60-second cutoff. See [Autonomous Power Control](docs/Autonomous%20Power%20Control.md).
+
+For porting the GUI, detector, thruster rig, fixtures and native optics into an
+existing Windows Stonefish/ROS 2 project, see
+[Perception_handoff_v1](docs/Perception_handoff_v1.md). The handoff includes an
+AMD64 reference recipe, extraction manifest, integration contracts, model-access
+requirements and verification checklist; Windows execution remains unverified.
