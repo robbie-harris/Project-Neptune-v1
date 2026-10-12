@@ -7,6 +7,13 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/neptune_sim']),
         ('share/neptune_sim', ['package.xml', 'README.md']),
+        ('share/neptune_sim/assets/perception', [
+            'assets/perception/flange.obj',
+            'assets/perception/valve.obj',
+        ]),
+        ('share/neptune_sim/scenarios/benchmarks', [
+            'scenarios/benchmarks/03_port_pipe_perception.scn',
+        ]),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

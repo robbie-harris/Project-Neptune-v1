@@ -1149,3 +1149,105 @@ complete update with a reset covariance. Defaults are engineering assumptions;
 real-world tuning and initialization behavior remain later work. No simulator
 truth input exists in this core; `/state/odometry` remains canonical.
 S2.7 was not started. No commit or push performed.
+
+
+# 21. Perception integration P0 / P1a completion record
+
+**P0 audit COMPLETE. P1a optional pipe + flange scene IMPLEMENTED; scene-load
+smoke passed, visual appearance and full mission validation not claimed.**
+P2 lateral thrusters + lights is next, NOT started. Stage 2 remains S2.1–S2.6
+complete/frozen; S2.7–S2.14 not started.
+
+Donor SHA: `608a3b985b8c5dbfc56f5398b8679c8038861bbe`. Exact source
+`Simulation/assets/flange.obj` copied byte-for-byte to
+`src/neptune_sim/assets/perception/flange.obj`; SHA-256
+`ffce7928cbdd8f6c0391600ec601c579f2da1f3eef4dad21a3fdbe4cdb08c55b`.
+Wedge geometry is absent from the donor and was not fabricated.
+
+New selectable scene:
+`src/neptune_sim/scenarios/benchmarks/03_port_pipe_perception.scn`, derived from
+our current `02_port_pipe_mission.scn` (live external copy differs only in
+whitespace). Pipe: donor dimensions radius 0.2 m, length 4.0 m; center
+(-20, 0, 3.2) m, RPY (pi/2, 0, 0). Flange: center (-20, 0.85, 3.2) m,
+RPY (0, 0, 0), scale 1; mesh bore already aligns with Y. Added one flange look,
+using existing Aluminium material. Existing support legs and inspection panel
+remain; supports lie beyond the shorter pipe ends. Mission target coordinates,
+HOME/dock and route are preserved.
+
+setup.py installs the new scene and mesh under share/neptune_sim. Flange uses
+supported `$(find neptune_sim)` package lookup; existing Girona include and
+assets retain the original Stonefish data root. No absolute donor/Mac path.
+Vehicle mass/inertia/buoyancy, all sensors, five actuators and ordering, adapter,
+controls, autonomy, localization, evaluation, and /neptune/cmd_body are unchanged.
+Original scenarios and runners are untouched; /sim/odometry remains evaluation-only.
+
+Validation: XML parsing, donor byte equality, 1008 vertices/1008 normals/1920
+faces, no MTL dependency, 19 resolved asset/include references, semantic baseline
+comparison excluding fixture changes, Python compile checks, neptune_sim colcon
+build (one package), installed resource equality/checksum, and git diff --check
+passed. Build used installed Stonefish dependency with expected overlay warning.
+Initial semantic comparison incorrectly compared XML indentation tails; ignoring
+whitespace confirmed preservation. No product change was needed for that check.
+
+Single isolated 20-second Stonefish-only smoke loaded both flange meshes, built
+GIRONA500/five motors, and reached Ready for running, without missing-asset/XML
+errors. Nonfatal SDL2 unsupported-operation error and propeller texture channel
+warning were logged. Shutdown exceeded the five-second SIGINT grace period and
+was forced (exit 137); afterward no simulator process remained. Screenshot
+capture was unavailable, so visible fixture appearance remains operator validation.
+No full mission, autonomy, perception, sweep, or P2 work ran. Dynamic clearance
+and mission completion in the new scene are not validated. No commit or push.
+See docs/PERCEPTION_INTEGRATION.md for exact launch/build and rollback commands.
+
+
+# 22. Perception integration P1b completion record
+
+**P1b IMPLEMENTED — optional environment now contains pipe, flange, and valve,
+the donor's three eventual detector categories.** Operator confirmed P1a pipe
+and flange visually; prior valve/handwheel absence was intentional. Model weights
+and detector remain NOT integrated. P2 lateral thrusters + lights is next, NOT
+started; Stage 2 remains complete/frozen through S2.6; S2.7 not started.
+
+Copied exact `Simulation/assets/valve.obj` from donor SHA
+`608a3b985b8c5dbfc56f5398b8679c8038861bbe` to
+`src/neptune_sim/assets/perception/valve.obj`, without modifying mesh bytes.
+SHA-256: `a5e079de7ad15b55231f4fe7b97462e3e2c2c661da24a4b883921515c8fd4faa`.
+setup.py now installs valve.obj alongside flange.obj. Portable package lookup
+`$(find neptune_sim)/assets/perception/valve.obj` resolves both physical and visual
+mesh references in `scenarios/benchmarks/03_port_pipe_perception.scn`.
+
+Donor scenes/generator put valve at Y=-0.85 and flange at Y=+0.85 relative to
+pipe center. Reproduced here: pipe (-20, 0, 3.2), flange (-20, +0.85, 3.2),
+valve (-20, -0.85, 3.2) m; valve RPY (0, 0, 0), scale 1. Body follows Y and
+intentionally surrounds pipe as inline housing; stem points upward along -Z
+in NED, with wheel center Z=2.58 m above pipe top Z=3.0 m. Valve/flange mesh
+Y bounds do not intersect; centers are separated by 1.7 m. No fabricated
+connectors or wedge: wedge remains absent from donor. Future forward view is
+plausible; actual camera FOV/occlusion testing awaits camera integration.
+Added only the valve and its donor blue look using existing Aluminium material.
+Vehicle, five thrusters/order, lights, controls, autonomy, estimator, camera,
+perception code, GUI, and baseline scene remain untouched. Ground truth remains
+evaluation-only. P1a scene placement is preserved.
+
+Validation: byte-exact donor copy; finite vertices/nonzero normals and valid face
+vertex/normal indices (1814 vertices, 1814 normals, 3608 faces); no MTL dependency;
+XML parsing; 21 resolved scene/include resources; P1a scene structure preserved
+except new valve/look; valve/flange bounding separation and handwheel height;
+selected neptune_sim colcon build (one package); installed scene and both meshes
+byte-equal to source; and git diff --check passed. Build used the installed
+Stonefish overlay with the expected workspace-dependency warning.
+
+Single isolated 15-second simulator-only smoke loaded both collision/visual valve
+and flange meshes, built Girona, and reached Ready for running. No missing-asset
+or XML error. The same nonfatal SDL2 unsupported-operation diagnostic and
+propeller texture-channel warning as P1a occurred. TERM did not exit within the
+three-second grace period; timeout forced termination (137). No simulator process
+remained. Visual valve appearance was not independently verified; operator visual
+confirmation remains pending. No mission or perception ran.
+
+Limitations: mesh/scene geometry is validated statically, but final valve visual
+appearance and camera visibility need operator confirmation. Intentional inline
+body/pipe overlap matches donor geometry; no CAD boolean union was performed.
+No full mission validation. Launch/build command is updated in
+`docs/PERCEPTION_INTEGRATION.md` to use /tmp/neptune-p1b-install.
+No P2 work, commit, merge, cherry-pick, or push.
