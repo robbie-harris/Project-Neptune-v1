@@ -1068,3 +1068,84 @@ Stage 2 progress: S2.1 evaluator implemented; S2.2–S2.5 COMPLETE;
 **S2.6 NEXT, not started**; S2.7–S2.14 not started, with broader trials assigned
 to S2.13. No S2.6/EKF/ESKF work began. Documentation finalization used the supplied
 live evidence; no additional mission, tests or builds ran. No commit or push occurred.
+
+
+# 20. S2.6 completion record
+
+**S2.6 COMPLETE — state/covariance structure only. S2.7 is NEXT, not started.**
+This record supersedes earlier historical S2.6-not-started statements.
+S2.1 evaluator implemented; S2.2–S2.6 COMPLETE; S2.7–S2.14 not started.
+Broader sensor trials remain assigned to S2.13.
+
+Added ROS-independent `neptune_state_estimation/eskf_state.py`, focused pure
+unit tests, and explicit NumPy dependencies in setup.py/package.xml. No node,
+subscription, publishing, launch integration or existing estimator change.
+
+Nominal state has 16 stored coordinates and 15 degrees of freedom:
+`p_WB[3]` (m), `v_WB[3]` (m/s), `q_WB[4]` (unit quaternion),
+`b_g[3]` (rad/s), `b_a[3]` (m/s^2). Defaults are zero vectors and identity
+orientation. Construction and copy own their arrays; mutable state validation
+rejects invalid dimensions, nonfinite values and nonunit edited quaternions.
+Quaternion construction normalizes finite nonzero inputs safely.
+
+Exact 15D error order and covariance block order:
+
+    delta_x = [delta_p, delta_v, delta_theta, delta_b_g, delta_b_a]
+    delta_p     0:3     world-frame position error (m)
+    delta_v     3:6     world-frame velocity error (m/s)
+    delta_theta 6:9     body-frame local attitude error (rad)
+    delta_b_g   9:12    body-frame gyro-bias error (rad/s)
+    delta_b_a   12:15   body-frame accel-bias error (m/s^2)
+
+Frame convention preserves the existing estimator: W is local `world_ned`,
+positive-down z, HOME-relative horizontal position; B is `base_link`.
+Quaternion order is ROS `[x,y,z,w]`, Hamilton multiplication; q_WB rotates
+body vectors into world. Internal v_WB is world-frame velocity, unlike the
+existing Odometry body-frame twist. No world/body axis conversion is introduced.
+Injection returns a new state: additive p/v/bias corrections and
+`q_new = q_WB ⊗ delta_q`. The right-multiplicative delta_q uses the rotation-vector
+exponential map (small-angle limit `[delta_theta/2, 1]`) and the result is
+normalized. Tests include a nonidentity quaternion to verify multiplication order.
+
+P is 15x15. Initial P is diagonal; each block accepts a scalar variance or
+three axis variances. Engineering initialization defaults only, not tuned
+real-world values:
+
+| Block | Per-axis default variance | Unit |
+| --- | --- | --- |
+| position | 1.0 | m^2 |
+| velocity | 0.01 | (m/s)^2 |
+| attitude error | (pi/180)^2 = approximately 0.00030461742 | rad^2 |
+| gyro bias | 0.0001 | (rad/s)^2 |
+| accel bias | 0.01 | (m/s^2)^2 |
+
+Initialization requires finite strictly positive variances. Covariance validation
+copies inputs and checks dimensions, finiteness, symmetry, nonnegative diagonal
+and positive semidefiniteness, with documented 1e-12 scale-relative numerical
+tolerance. General validation permits zero uncertainty, unlike initialization.
+
+Validation:
+
+- Focused pure pytest: **49 passed in 0.13 s**.
+- Final ROS-sourced package pytest: **49 passed, 2 failed, 1 skipped in 0.29 s**.
+  Failures are existing package-wide flake8 (39 issues in untouched modules)
+  and pep257 issues in untouched modules; copyright test is skipped by its
+  existing missing-copyright-header skip decorator. Initial new-file lint issues were fixed.
+  Separate ament_flake8 and ament_pep257 on both new files: passed, no problems.
+  No test/acceptance criterion was weakened and unrelated modules were not fixed.
+- Python compileall of estimation modules and tests: passed.
+- `colcon build --packages-select neptune_state_estimation` with isolated
+  `/tmp/neptune-s26-{build,install,log}` outputs: passed, **1 package finished**.
+- `git diff --check`: passed. Existing dead_reckoning_state.py and pressure_depth.py
+  have no diff. Docker socket denial on validation attempts required approved retries.
+
+Limitations: **ESKF is NOT operational yet.** This is only mathematical structure.
+No IMU propagation, measurement updates, gating, filter node, dead-reckoning
+replacement, simulator run or mission execution. Bias axes assume future IMU
+measurements are expressed in base_link; sensor transforms are future integration
+work. Covariance reset/recentering after orientation injection is explicitly
+**deferred to S2.8+**. Injection does not modify P and must not be treated as a
+complete update with a reset covariance. Defaults are engineering assumptions;
+real-world tuning and initialization behavior remain later work. No simulator
+truth input exists in this core; `/state/odometry` remains canonical.
+S2.7 was not started. No commit or push performed.
