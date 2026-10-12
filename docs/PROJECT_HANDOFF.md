@@ -898,3 +898,173 @@ repeated IMU trials are deferred to **S2.13**; they are not required to complete
 this lean S2.4 task. The existing S2.3 clean result remains historical reference
 evidence. No additional mission, test or build was run during this documentation
 finalization. S2.5 was not started; no commit or push occurred.
+
+
+# 19. S2.5 implementation record
+
+**S2.5 COMPLETE. S2.6 is NEXT, not started.** S2.4 remains COMPLETE.
+The completed live result below supersedes the historical implementation and
+live-pending records retained here, and earlier statements that S2.5 is not started.
+
+Added `scripts/run_s25_case.sh` and `docs/S2_5_PRESSURE_VALIDATION.md` for one
+pressure stress case: `pressure_bias=+1000.0 Pa`, seed 42, pressure noise and
+dropout zero, all IMU/DVL degradation zero. Optional `clean` selects zero bias;
+no sweep is implemented. Run `./scripts/run_s25_case.sh pressure_bias` from the
+repository root. No live simulator or mission was run during implementation.
+
+The unchanged pressure_depth computes `P/(997*9.81)+0.40`; +1000 Pa adds
++0.102243530 m to depth / positive-down z. The unchanged estimator takes z
+from pressure depth and x/y from DVL integration using IMU orientation.
+Horizontal localization has no direct pressure dependence; closed-loop motion
+and timing can still vary. This is an engineering stress case, not a calibrated
+real-ocean sensor specification. Mission completion was pending at implementation;
+the completed live result below resolves it.
+
+Only pressure_depth is remapped: `/sim/pressure:=/degraded/pressure`, yielding
+`/sim/pressure -> sensor_degrader -> /degraded/pressure -> pressure_depth`.
+Estimator DVL and IMU remain raw. `/state/odometry` stays canonical and
+`/sim/odometry` stays evaluation-only, including diagnostic z snapshots.
+No estimator, pressure_depth, autonomy, control, Stonefish source or perception
+code changed.
+
+The runner retains S2.4 fresh Stonefish, exact executable cleanup, shared runtime
+lock, 120-second discovery/respawn/enable budget with bounded service retries,
+respawn before dynamics/pressure/IMU/DVL enable, raw and degraded topic probes,
+process monitoring, literal COMPLETE detection, timeout rejection, 430-second
+mission deadline, bounded evaluator shutdown and cleanup traps. The inner
+whole-run backstop remains 650 seconds plus a 40-second kill deadline. Host
+Docker startup and exec additionally have 60/700-second bounds with 5/10-second
+kill deadlines. Results, conditions, logs, mission status and outcome reason
+are retained in unique container `/tmp/neptune-s25-results` directories;
+completion prints metrics and the result directory.
+
+Existing evaluator JSON retains horizontal/3D/depth RMSE, maximum and final
+horizontal/3D errors, z_error, yaw RMSE and accepted/rejected samples. Crucially,
+initial translation alignment includes z, so constant startup pressure bias
+cancels in displacement-based z_error and depth RMSE. Those metrics must not be
+claimed to demonstrate the absolute 0.102 m offset. Initial/final absolute
+estimated and truth z snapshots are retained and printed for independent
+inspection. They are sequential, unsynchronized samples, affected by motion
+and latency; compare estimate-minus-truth against baseline calibration error
+(and optional clean reference). Evaluator semantics are unchanged.
+
+## Quick validation
+
+- `bash -n scripts/run_s25_case.sh`: passed.
+- Static two-case, pressure-only routing, startup order, deadline and cleanup
+  checks: passed; invalid case returned usage and exit code 2 before Docker.
+- ROS-sourced simulation/evaluation unit tests: **38 passed in 0.39 s**.
+- Python compileall of simulation/evaluation modules: passed.
+- Relevant `neptune_evaluation` colcon build with isolated
+  `/tmp/neptune-s25-{build,install,log}` outputs: **1 package finished**, passed.
+- `git diff --check`: passed; estimator and pressure_depth sources have no diff.
+
+The initial Docker test invocation was denied access to the Docker socket;
+the approved retry ran successfully. No live mission or startup smoke ran.
+Full runtime paths and expected absolute depth behavior remain live-pending.
+Existing Docker/ROS/Stonefish/workspace/S2.2/S2.3 overlays, Linux /proc, GNU timeout
+and flock are assumed. Container /tmp is not durable across replacement; no bag
+is recorded. SIGKILL/container loss cannot guarantee cleanup or metrics.
+One run is not statistical evidence; COMPLETE means mission logic completion,
+not independently verified physical HOME arrival.
+
+Stage 2 progress: S2.1 evaluator implemented; S2.2 COMPLETE; S2.3 COMPLETE;
+S2.4 COMPLETE; **S2.5 IMPLEMENTED / LIVE VALIDATION PENDING**;
+S2.6–S2.14 remain not started. S2.6, EKF and ESKF were not begun.
+No commit or push performed.
+
+
+## S2.5 pressure transport diagnosis and correction
+
+The operator's pressure-only startup evidence established raw pressure availability
+and degrader initialization, yet the mission aborted at the degraded probe.
+Inspection of retained failed-run logs identified the actual failure:
+`degraded-pressure-health.log` said “Could not determine the type for the passed
+topic”. The untyped ros2 echo command exited before discovering the newly created
+publisher. Its 20-second enclosing timeout did not wait/retry type discovery.
+Cleanup then stopped Stonefish; post-cleanup absence of raw pressure was expected.
+The earlier invalid-node-context traceback is consistent with cleanup interrupting
+initialization, not proof of a callback implementation bug.
+
+`run_s25_case.sh` now supplies `sensor_msgs/msg/FluidPressure` explicitly for both
+raw and degraded pressure checks, keeping the existing 20-second bounded degraded
+probe, early-exit detection, degrader log printing, exact cleanup, service retries
+and all runtime deadlines. No arbitrary sleeps or sensor_degrader implementation
+changes were added. Added a real FluidPressure +1000 Pa callback regression in
+`src/neptune_sim/test/test_sensor_degrader.py`; updated the S2.5 validation document.
+
+QoS was verified rather than assumed: Stonefish source constructs the pressure
+publisher with the default reliable depth profile; installed degrader source uses
+sensor-data BEST_EFFORT input and reliable depth-10 output. A live topic-info smoke
+test confirmed raw RELIABLE/VOLATILE -> input BEST_EFFORT/VOLATILE and degraded
+RELIABLE/VOLATILE. These are compatible, including downstream pressure_depth.
+QoS, DVL/IMU behavior, degradation logic and package dependencies were unchanged.
+
+Short live proof used fresh Stonefish, respawn first, bounded service retries,
+raw pressure health, installed degrader with +1000 Pa, topic info, and a
+header-matched numerical pair. At stamp (1791563480, 21667172), frame
+GIRONA500/pressure, raw pressure was 566.4149137165131 Pa, degraded pressure
+1566.4149137165132 Pa, difference 1000.0000000000001 Pa. Container evidence:
+`/tmp/neptune-s25-results/pressure_bias.Cxl9HvAU/{pair.json,raw-qos.log,degraded-qos.log}`
+and associated logs. The temporary diagnostic exited before launching adapter,
+state estimator, evaluator or mission; cleanup stopped simulator/degrader.
+TRANSPORT_PROVEN is not mission completion; no metrics.json was expected.
+
+Validation: **39 unit tests passed in 0.27 s**, simulation compileall passed,
+`neptune_sim` build passed (one package; installed Stonefish dependency used,
+with the expected colcon overlay warning). Bash syntax, static QoS/routing/probe
+bounds and whitespace checks passed. Docker socket access initially required an
+approved retry. No full mission ran. The corrected runner is ready for the single
+future pressure_bias mission. Remaining limitations include live full-mission
+behavior, absolute-z snapshot timing, and initial z alignment cancelling constant
+bias in evaluator displacement metrics; no mission/depth accuracy is claimed.
+
+Stage 2 progress remains S2.1 evaluator implemented; S2.2–S2.4 COMPLETE;
+**S2.5 IMPLEMENTED / LIVE VALIDATION PENDING (pressure transport smoke PASSED)**;
+S2.6–S2.14 not started. Estimator and pressure_depth sources have no diff.
+No autonomy/control/Stonefish source change, EKF/ESKF work, commit or push.
+
+
+## S2.5 completed live result
+
+**S2.5 COMPLETE. Mission: COMPLETE. S2.6 is NEXT, not started.**
+This operator-supplied live result supersedes the historical live-pending records.
+
+Configuration: pressure bias **+1000 Pa**, raw DVL and raw IMU; only pressure
+was routed through sensor_degrader to pressure_depth. The theoretical positive-down
+depth offset is `1000 / (997 * 9.81) ≈ +0.102 m` (+0.102243530 m).
+
+| Absolute unaligned z snapshot | Estimated z (m) | Truth z (m) | Estimate minus truth (m) |
+| --- | --- | --- | --- |
+| Initial | 0.558699388317337 | 0.4477515872834421 | +0.1109478010338949 |
+| Final (sequential) | 0.5147509147406254 | 0.4434643853366555 | approximately +0.0712865 |
+
+Snapshots are sequential rather than synchronized. The initial absolute comparison
+is the primary evidence of the injected constant bias: approximately +0.111 m,
+close to the expected +0.102 m. Motion and latency can affect the final sequential
+comparison; it is not a synchronized measure of the constant offset.
+
+| Evaluator metric | Exact live value |
+| --- | --- |
+| sample_count | 6804 |
+| horizontal RMSE | 0.015721932513385765 m |
+| 3D RMSE | 0.026528776101284453 m |
+| depth RMSE | 0.02136812578296526 m |
+| max horizontal error | 0.25471932527638036 m |
+| max 3D error | 0.2575564823454711 m |
+| final horizontal error | 0.009473361170147968 m |
+| final 3D error | 0.02222718092917588 m |
+| yaw RMSE | 0.00017489360939051805 rad |
+| rejected pairs | 3 |
+| Mission | COMPLETE |
+
+The evaluator aligns initial position, including z, so its depth RMSE does **not**
+represent the full constant pressure offset. Horizontal localization remained
+largely unaffected, as expected, and the mission still completed. This is
+single-run engineering evidence, not statistical reliability or calibrated
+real-ocean performance. Broader pressure noise/bias trials are deferred to **S2.13**.
+
+Stage 2 progress: S2.1 evaluator implemented; S2.2–S2.5 COMPLETE;
+**S2.6 NEXT, not started**; S2.7–S2.14 not started, with broader trials assigned
+to S2.13. No S2.6/EKF/ESKF work began. Documentation finalization used the supplied
+live evidence; no additional mission, tests or builds ran. No commit or push occurred.
