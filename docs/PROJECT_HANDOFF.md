@@ -1406,3 +1406,126 @@ Detailed commands, rollback and limitations in docs/PERCEPTION_INTEGRATION.md.
 Camera stream/renderer issue remains unresolved within P3; do not automatically
 start P4 or claim P3 complete. No autonomy, estimator, actuation, GUI, donor,
 commit, push, merge or cherry-pick changes.
+
+
+## P3b control-camera diagnosis — BLOCKED (2026-10-12)
+
+**P3 remains BLOCKED; P4 was not started.** The paired control establishes a
+shared Stonefish/WSLg rendering-path limitation in this runtime, rather than a
+defect unique to the inspection camera. Live camera diagnostics stopped after
+one hardware and one software run, well inside the ten-minute budget. No
+configuration, simulator source, driver, Docker, perception, control, autonomy,
+estimator, actuation, GUI, or mission changes were made. No commit or push.
+
+### Paired measurement
+
+Both cameras ran simultaneously in the same prior P3 temporary fixed-pose scene:
+Girona (-18.5,0,3), yaw pi, fixed body; legacy sensor enable-service entries
+removed in the /tmp copy so both cameras were enabled. Sensor specifications,
+world, fixtures, lights and graphical sensors were otherwise retained. No
+services or actuator commands were needed. Simulator arguments: 100 Hz physics,
+320x240 preview, low graphics. Each run used 12 seconds startup followed by a
+20.012-second measurement window; rates are counts divided by the entire window.
+RELIABLE depth-10 diagnostic subscriptions matched both RELIABLE/VOLATILE native
+image publishers. The original camera is disabled by its enable service in the
+repository's normal startup; its control measurement here is explicitly enabled.
+
+| Renderer | Existing /sim/camera/image_color | Inspection image_color |
+| --- | --- | --- |
+| D3D12 RTX 4080 Laptop, Mesa 24.0.5 | 0 frames / 20.01196 s = 0 Hz | 1 frame / 20.01196 s = 0.04997 Hz |
+| llvmpipe LLVM 17.0.6, Mesa 24.0.5, 8 threads | 19 frames / 20.01169 s = 0.949445 Hz | 19 frames / 20.01169 s = 0.949445 Hz |
+| Software maximum interarrival gap | 1.216205 s | 1.194253 s |
+| Software maximum message-stamp gap | 2.672112 s | 2.676802 s |
+
+The single hardware inspection image means hardware was not literally zero in
+this fixed-pose rerun; it still has no usable sustained stream. No hardware
+interframe gap can be calculated from one image. Earlier normal-scene hardware
+zero-image/20-second result remains valid historical evidence. Earlier software
+inspection rates were 0.375 Hz normal spawn and 0.998 Hz fixed pose; this paired
+fixed-pose result is the final measurement, with no intervening fix. Stamp gaps
+and receipt gaps are reported separately; wall-clock publication stamps and
+queued delivery are not physical capture timestamps. Both software streams'
+received stamps strictly increased. These short windows do not prove long-term
+reliability.
+
+### Configuration and source comparison
+
+| Setting | Existing Girona camera | Inspection camera | Donor forward CameraLeft/Right |
+| --- | --- | --- | --- |
+| Sensor / native renderer | camera / ColorCamera / OpenGLRealCamera | same | camera (same native path before donor patches) |
+| Rate | 10 Hz | 10 Hz | 10 Hz |
+| Resolution | 1360x1024 | 640x480 | 640x480 |
+| Horizontal FOV | 55 degrees | 145 degrees | 80 degrees |
+| Near/far clip (m) | native defaults 0.02/100000 | 0.05/20 | 0.05/20 |
+| XYZ (m) | (0.5,-0.12,0.5) | (0.82,0,0.20) | (0.62,-0.06/+0.06,0) |
+| RPY (rad) | (0,0,1.571) | (pi/2,0,pi/2) | (pi/2,0,pi/2) |
+| Enable state on repository startup | disabled: /sim/proscilica/set_enabled | enabled: no enable service | enable service; donor native patch starts enabled |
+| Native name/frame | GIRONA500/proscilica | GIRONA500/inspection_camera_optical_frame | Neptune/CameraLeft or CameraRight |
+| ROS topic prefix | /sim/camera | /neptune/camera/inspection | /neptune/ideal/camera/left or right |
+| XML frame override | none | none | qualified camera name |
+
+Both local cameras use the same bridge branch: advertise image_color, create
+camera_info, install ColorCameraImageReady. Queue size is ceil(sensor rate)=10;
+measured QoS is RELIABLE/VOLATILE. No renderer selector or readback-disable option
+is present in either XML. Native ROS2ScenarioParser explicitly disables sensors
+with enable services; their entries were absent in the measured temporary copy.
+Inspection is enabled without that service. Native CameraInfo uses the sensor
+name; leaving the inspection Image frame override absent keeps headers consistent.
+
+Native ColorCamera initializes OpenGLRealCamera for both sensors. Its DrawLDR
+reads RGB texture into a pixel-pack buffer with glGetTexImage; UpdateTransform
+maps that PBO with glMapBuffer and invokes NewDataReady only for a non-null
+mapping. The common pipeline queues non-continuous views and normally schedules
+one queued view per render in addition to continuous views. These are relevant
+shared bottlenecks, **not proof of a specific failed GL call or driver defect**.
+Logs reached Ready for running without missing camera resources/XML errors;
+existing SDL2 unsupported-operation and texture-channel warnings persisted.
+Renderer identities were independently checked with glxinfo under each run's
+environment. No detailed GPU timing or GL-error instrumentation was performed.
+
+Donor SHA 608a3b985b8c5dbfc56f5398b8679c8038861bbe inspection_fast/inspection_tank
+camera XML and tools/patch_stonefish.py, patch_views.py, patch_optics.py were
+read only. Donor changes include rendering all pending views, particle controls,
+clock/capture stamping, bounded physics catch-up and altered enable defaults;
+none were applied. They do not by themselves prove a D3D12 readback fix.
+
+### FOV decision and validation
+
+FOV remains **145 -> 145 degrees**, resolution **640x480 -> 640x480**; exact
+configuration change: **none**. Prior P3 widened the FOV to fit separated fixtures
+at the unchanged 1.5 m body-origin standoff (lens-to-axis 0.68 m). Fixture centers
+are approximately atan(0.85/0.68)=51.3 degrees off axis: an 80-degree horizontal
+view would exclude both centers at that pose. An 80-degree view may be preferable
+for later detection with a revised viewing distance, but is not established as
+a throughput fix. Equal ~0.95 Hz control/inspection rates and hardware failure
+of the control trigger the explicit platform-limit stop condition; no FOV tuning
+or workaround was implemented.
+
+Actual software inspection Image and CameraInfo dimensions were 640x480, frame
+GIRONA500/inspection_camera_optical_frame. Received K remains
+fx=fy=100.8956124412747 px, cx=320, cy=240 (not manually assigned). Existing
+CameraInfo was 1360x1024 with fx=fy=1306.267846340393, cx=680, cy=512.
+The unchanged two-edge static TF passed a fresh bounded live check, including
+translation (0.82,0,0.20) and optical quaternion (0.5,0.5,0.5,0.5).
+The retained prior P3 image /tmp/neptune-p3-inspection.png was re-inspected:
+pipe/flange/valve/handwheel visible, no hull/lamp obstruction. Visibility was
+not freshly captured in P3b; this is retained-image evidence with unchanged optics.
+All repository sensors remain unchanged. Both probe simulator processes were
+stopped with bounded cleanup; no simulator remained afterward.
+
+Validation outcome: **FAIL** (<5 Hz and multi-second stamp gaps; hardware has no
+sustained stream). TF and dimensions/CameraInfo checks passed. Only documentation
+changed, so no ROS package rebuild was necessary. git diff --check passed.
+Evidence is temporary container /tmp/neptune-p3b-{probe.py,result.json,hardware.log,
+software.log}; numeric results are retained here because /tmp is not durable.
+
+Remaining blocker: a rendering/runtime path that sustains at least 5 Hz with
+maximum gap below 0.5 s (preferably >=8 Hz without multi-second gaps). The exact
+low-level D3D12 stall remains unresolved; the proven diagnosis is shared runtime
+scope, not a specific driver or PBO failure. Smallest next recommendation is a
+bounded comparison on another supported accelerated runtime (for example native
+Linux), using unchanged camera XML. Alternatively, separately assess the donor's
+narrow view-scheduling patch; do not import its unrelated clock/optics changes.
+Lower-rate perception requires explicit acceptance and a freshness policy; none
+was accepted or implemented here. P4 remains NOT STARTED. Stage 2 remains frozen
+through S2.6; S2.7–S2.14 were not started.
