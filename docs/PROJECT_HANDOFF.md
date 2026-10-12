@@ -1332,3 +1332,77 @@ valve retained; wedge absent and not fabricated. Model/detector remain absent.
 See docs/PERCEPTION_INTEGRATION.md for complete mapping, launch/build commands,
 legacy rollback and runtime limitations. No P3, mission, perception, GUI,
 commit, push, merge or cherry-pick.
+
+
+# 24. Perception integration P3 camera record — rate requirement NOT passed
+
+**P3 camera implemented and visually verified; NOT declared complete.** Stable
+approximately 10 Hz images have not been established. P4 is next only after
+resolving stream performance/freshness, NOT started. Stage 2 remains frozen
+through S2.6; S2.7 not started. Prior P2 physics validation and graphical limits
+remain recorded. No detector/Roboflow/alignment/GUI integration, mission or commit.
+
+Read AGENTS.md, this entire handoff, and PERCEPTION_INTEGRATION.md before editing.
+Added only to optional perception Girona: XML sensor inspection_camera_optical_frame,
+XYZ (0.82,0,0.20) m, RPY (pi/2,0,pi/2); optical +Z points body +X, image right/down
+align with body +Y/+Z. Lens clears hull, front propeller, and lamps. Initial
+(0.40,0,-0.16)/110° mount was rejected after bow hardware appeared in its image.
+Final 145° HFOV fits separated valve/flange at unchanged 1.5 m body-origin
+standoff. Resolution 640x480, nominal 10 Hz, rendering range 0.05–20 m, rgb8,
+1920-byte rows. Wide optics differ deliberately from donor SHA
+608a3b985b8c5dbfc56f5398b8679c8038861bbe's 80° torpedo reference.
+
+Native topics /neptune/camera/inspection/image_color and
+/neptune/camera/inspection/camera_info, both header.frame_id
+GIRONA500/inspection_camera_optical_frame. No frame override/relay: native source
+overrides Image only, so defaults keep Image and CameraInfo consistent.
+Received K: fx=fy=100.8956124412747 px, cx=320, cy=240; P agrees, R identity,
+plumb_bob D=[0,0,0,0,0]. Matched image/info stamps advance monotonically, but
+native stamps are readback/publication wall time, NOT validated true capture
+instants; no clock/timestamp patch or rewrite.
+
+Measured publisher QoS (image and info) RELIABLE/VOLATILE; RMW reports history
+UNKNOWN/depth 0, while source declares depth 10. Probe matched reliable QoS.
+No arbitrary publisher-QoS change. Future P4 must honor freshness and these optics.
+
+New optional perception_camera.launch.py installs with neptune_sim, launches
+simulator plus two static TF publishers only. base_link -> inspection_camera_link
+translation (0.82,0,0.20), identity; link -> qualified optical frame rotation
+(pi/2,0,pi/2), quaternion (0.5,0.5,0.5,0.5). Live TF check passed after correcting a depth-one diagnostic subscriber queue
+that dropped one of the two latched messages. No truth/state
+input or world/body pose publisher. Added launch/TF/image_view dependencies;
+standard viewer installed in dev container, not launched during this turn.
+Optional explicit software_rendering flag defaults false; baseline environment,
+Dockerfile and native simulator sources remain untouched.
+
+Static validation/build passed: XML/resources, semantic preservation of all
+existing sensors/lights/actuators/body, Python/launch compile, neptune_sim colcon
+(one package, installed Stonefish overlay warning), installed resource equality,
+launch argument parsing, live static TF and git diff --check. Original camera,
+its transforms/topics, all seven motors, lamps, autonomy, localization, controls
+and mission coordinates are unchanged. Baseline scene remains untouched.
+
+Camera smoke **rate gate FAILED**, not weakened: hardware WSLg D3D12 on RTX 4080
+Laptop/Mesa 24.0.5 advertised camera but yielded no received image within 20 s,
+including matched-QoS and OpenGL 4.5 diagnostic retries. Explicit llvmpipe software
+mode (8 threads, 320x240 preview) delivered images/info but final actual-scene
+measurement was 3 images/~8 s (0.375 Hz), max stamp gap 3.916 s, final age 3.32 s.
+Fixed inspection diagnostic delivered 8/~8 s (0.998 Hz), max gap 0.948 s.
+No 10 Hz or full-runtime readiness claim. Some processes needed forced bounded
+cleanup; none remain. SDL2, texture-channel and class-loader warnings recorded.
+
+Temporary fixed-pose view at (-18.5,0,3), yaw pi, enabled legacy sensors in /tmp
+copies only; repository spawn/dynamics/service defaults untouched. IMU/DVL ~20 Hz,
+pressure ~5 Hz; original 1360x1024 camera delivered nine frames/~8 s. Inspection
+frames visibly show pipe/flange/valve/handwheel with no bow/lamp obstruction or
+severe glare/clipping; no saturated pixels. Single retained temporary image
+/tmp/neptune-p3-inspection.png (initial rejected image overwritten, no repo image).
+Inspection-lamps-on mean intensity 120.261/255 versus 119.697/255 with those lamps
+removed in a test copy, mean absolute difference 0.760/255. Contribution modest;
+Omni/daylight/particles remain, so headlights-only performance is not established.
+No lamp redesign. Wedge remains absent; model/detector still not integrated.
+
+Detailed commands, rollback and limitations in docs/PERCEPTION_INTEGRATION.md.
+Camera stream/renderer issue remains unresolved within P3; do not automatically
+start P4 or claim P3 complete. No autonomy, estimator, actuation, GUI, donor,
+commit, push, merge or cherry-pick changes.

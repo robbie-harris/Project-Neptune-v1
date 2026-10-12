@@ -1,9 +1,11 @@
-# Perception integration — P1 / P2
+# Perception integration — P1 / P2 / P3
 
 P0 audit complete. P1a added the optional pipe/flange scene; P1b adds its valve.
 P2 lateral thrusters + lights is implemented; unit/build and physics actuation
 checks pass, but full graphical actuation remains unverified because simulator
-ROS callbacks stalled. P3 camera is next, not started. Stage 2 remains frozen
+ROS callbacks stalled. P3 camera is implemented and visually verified, but its
+stable approximately 10 Hz stream requirement has NOT passed. P4 is next only
+after the stream issue is resolved, and has not started. Stage 2 remains frozen
 through S2.6. The environment now contains pipe, flange, and valve categories;
 model weights and the detector are still not integrated.
 
@@ -22,11 +24,12 @@ Y=+/-2.5 lie beyond the shortened pipe ends; repositioning them is outside P1a.
 The baseline Girona definition, original five actuators/order, sensors, body
 physics, autonomy, localization, mission coordinates, and command interface are
 unchanged. The optional scene now selects a perception-specific Girona copy
-with two appended motors and two added lamps. Baseline scenarios and runners
+with two appended motors, two added lamps, and one additional inspection camera.
+Baseline scenarios and runners
 remain untouched. Ground truth remains evaluation-only.
 
 Packaging installs the optional scene, both perception meshes, and the
-perception-specific Girona include. Stonefish resolves the flange
+perception-specific Girona include and optional camera/TF launch. Stonefish resolves the flange
 with `$(find neptune_sim)/assets/perception/flange.obj`; its existing Girona
 include and original textures/meshes resolve through the existing simulator data
 root. This is an overlay, not a standalone replacement for Stonefish data.
@@ -192,7 +195,180 @@ pure actuation test, not controlled inspection. No full mission, estimator,
 perception, GUI or P3 ran. Evidence: container `/tmp/neptune-p2-smoke-result.json`,
 `/tmp/neptune-p2-physics.log` and adapter logs; /tmp is temporary.
 
-## Visual launch
+## P3 forward inspection camera — rate acceptance pending
+
+**Camera/frames implemented; image content verified. P3 is not declared complete:
+the requested stable approximately 10 Hz live stream has not been established.**
+No detector, Roboflow, alignment, GUI, or P4 work was started.
+
+Camera sensor XML name: `inspection_camera_optical_frame`; native qualified name
+and Image/CameraInfo frame: `GIRONA500/inspection_camera_optical_frame`.
+XYZ **(0.82, 0, 0.20) m**, RPY **(pi/2, 0, pi/2)**. Optical Z points body +X;
+optical X points body +Y (right), optical Y body +Z (down). Final lens is ahead
+of the hull (max X ~0.704), added front rotor (max X ~0.81), and lamps (X=0.76).
+No existing camera, sensor, thruster, light, body physics or topic was changed.
+
+Initial central-gap mount (0.40,0,-0.16) / 110° showed bow hardware in the
+image and was rejected by visual inspection. Final forward mount and **145°
+horizontal FOV** retain the whole flange/valve/handwheel at the existing 1.5 m
+body-origin standoff, leaving 0.68 m lens-to-pipe-axis distance. This wide FOV is
+deliberately different from the donor 80° reference; future detector validation
+must use these actual optics. Resolution **640x480**, nominal **10 Hz**,
+near/far **0.05/20 m**, native **rgb8**, step **1920 bytes**.
+
+External topics generated natively from `/neptune/camera/inspection`:
+
+- `/neptune/camera/inspection/image_color` — sensor_msgs/Image.
+- `/neptune/camera/inspection/camera_info` — sensor_msgs/CameraInfo.
+
+No image `frame_id` override is used: inspected native source overrides only
+Image, while CameraInfo always uses the sensor name. Leaving it native keeps
+both headers identical without a relay or simulator-source patch.
+
+Actual received intrinsics:
+
+```text
+K = [100.8956124412747, 0, 320;
+     0, 100.8956124412747, 240;
+     0, 0, 1]
+P = [fx, 0, 320, 0; 0, fy, 240, 0; 0, 0, 1, 0]
+D = [0, 0, 0, 0, 0], plumb_bob; R identity
+```
+
+Native Image/CameraInfo stamps matched and advanced monotonically in received
+pairs. **These are ROS wall-clock readback/publication stamps**, as verified in
+ColorCameraImageReady; they are not a validated physical capture-time clock.
+No timestamp rewrite or donor renderer/clock patch was added. Rate and freshness
+must remain explicit in P4; neither stale frames nor publish stamps establish
+perception readiness.
+
+Measured live QoS for both native publishers: **RELIABLE / VOLATILE**.
+RMW endpoint metadata reported history UNKNOWN/depth 0; source declares a
+10-message queue. Record this distinction rather than claiming measured depth 10.
+The final probe used RELIABLE/depth-5 subscriptions after inspection of the live
+publisher. Earlier best-effort diagnostics were not used to claim acceptance.
+
+`perception_camera.launch.py` owns only these static edges:
+
+```text
+base_link -> inspection_camera_link
+    translation (0.82,0,0.20), identity rotation
+inspection_camera_link -> GIRONA500/inspection_camera_optical_frame
+    zero translation, RPY (pi/2,0,pi/2), quaternion (0.5,0.5,0.5,0.5)
+```
+
+Live TF verification passed after increasing the diagnostic subscriber queue
+from depth one to retain both latched publishers. `base_link` is the existing canonical estimator's
+body frame; this launch does not publish world/body pose or consume truth.
+Direct simulator execution does not start these TF publishers. Launch starts
+only the simulator and two static TF nodes, no adapter/mission/perception/viewer.
+
+Validation: scene XML/resource resolution, semantic preservation of all existing
+vehicle/sensors/lights/motor blocks, package/launch compilation, neptune_sim
+colcon build, installed source equality, launch argument parsing, live static TF,
+and git diff --check passed. image_view and its ROS dependencies were installed
+in the existing dev container; package.xml declares viewer/TF/launch dependencies.
+No Docker image, simulator source, or baseline graphics default was changed.
+
+### Short camera smoke observations
+
+Native WSLg/D3D12 (RTX 4080 Laptop, Mesa 24.0.5) created the camera publisher but
+produced no received image within 20 s, including matched-QoS retries and an
+OpenGL 4.5 override. Hardware camera streaming therefore **failed**. Diagnosis
+is unresolved; no driver/renderer fix is claimed.
+
+An explicit process-local software-renderer diagnostic (llvmpipe, 8 threads,
+320x240 preview; image still 640x480) delivered native images/CameraInfo:
+
+| Final geometry test | Received images / full measurement window | Wall rate | Max stamp gap |
+| --- | --- | --- | --- |
+| Actual optional scene at normal HOME spawn | 3 / ~8 s | 0.375 Hz | 3.916 s |
+| Fixed inspection pose with legacy sensors enabled | 8 / ~8 s | 0.998 Hz | 0.948 s |
+| Same fixed pose, inspection lamps removed for comparison | 6 / ~5 s | 1.200 Hz | 0.862 s |
+
+Rates use the full measurement window, not just the interval between a short
+burst's first/last frame. Actual-scene final frame age was 3.32 s. The explicit
+nominal-rate/freshness gate failed; its assertion failure was retained. Changing
+the configured sensor rate to disguise this was not done. Full mission/runtime
+readiness is not established by the slow diagnostic stream.
+
+For visibility only, temporary /tmp XML fixed Girona at (-18.5,0,3), yaw pi and
+enabled legacy sensors by removing their enable-service entries in that test
+copy. Repository spawn/dynamics/enable states remain unchanged. Old IMU and DVL
+produced ~20 Hz, pressure ~5 Hz; original `/sim/camera/image_color` delivered
+nine 1360x1024 frames in the eight-second inspection window. Scalar sensors and
+old camera therefore still work in the test configuration; legacy camera also
+suffers graphical rate limits. No mission, state estimator or motor command ran.
+
+Exactly one retained debug image: `/tmp/neptune-p3-inspection.png` in the container
+and host, overwritten after rejecting the initial mount. Final image visibly
+contains pipe, flange, valve body/stem/handwheel; bow and lamps do not obstruct
+it. No saturated pixels were measured and no severe fixture clipping/glare was
+visible. Pipe continues beyond the image, as expected for a long pipe.
+
+Inspection lamps-on mean intensity was 120.261/255 versus 119.697/255 without
+those two lamps; mean absolute RGB difference ~0.760/255. This is a modest
+contribution, not calibrated illumination: original Omni/daylight and particles
+remain present. The region is visibly lit, but headlights-only performance is
+not established. P2 light geometry was left untouched.
+
+Temporary logs: `/tmp/neptune-p3-actual.log`, `inspection.log`, `lamps-off.log`
+(with the same neptune-p3 prefix). Final GPU diagnostics reused the actual log
+and result JSON; numeric software measurements above were retained from probe
+stdout. Some dynamic-scene processes needed bounded forced shutdown; fixed-pose
+runs exited cleanly, and no owned simulator/TF process remained. Native SDL2,
+texture-channel and class-loader cleanup warnings were recorded. No debug image
+was committed. Wedge remains absent.
+
+### P3 visual inspection commands
+
+Normal optional scene with camera TFs (native graphics default; hardware stream
+currently unverified):
+
+```bash
+docker compose -f docker/compose.yaml exec dev bash -lc '
+  source /opt/ros/jazzy/setup.bash
+  source /opt/stonefish_ws/install/setup.bash
+  source /tmp/neptune-p3-install/setup.bash
+  ros2 launch neptune_sim perception_camera.launch.py \
+    simulation_data:=/workspace/external/stonefish/Tests/Data
+'
+```
+
+For the measured slow diagnostic view of the fixture, use the temporary fixed
+inspection test scene and explicit software renderer in an isolated ROS domain:
+
+```bash
+docker compose -f docker/compose.yaml exec dev bash -lc '
+  source /opt/ros/jazzy/setup.bash
+  source /opt/stonefish_ws/install/setup.bash
+  source /tmp/neptune-p3-install/setup.bash
+  ROS_DOMAIN_ID=74 ros2 launch neptune_sim perception_camera.launch.py \
+    simulation_data:=/workspace/external/stonefish/Tests/Data \
+    scenario:=/tmp/neptune-p3-view.scn software_rendering:=true \
+    window_width:=320 window_height:=240
+'
+```
+
+In a second terminal, view the raw inspection feed:
+
+```bash
+docker compose -f docker/compose.yaml exec dev bash -lc '
+  source /opt/ros/jazzy/setup.bash
+  ROS_DOMAIN_ID=74 ros2 run image_view image_view --ros-args \
+    -r image:=/neptune/camera/inspection/image_color
+'
+```
+
+The /tmp test scene is a fixed-pose diagnostic, not the mission configuration.
+Software mode is an explicit optional override, not a silent fallback or baseline
+change. /tmp files disappear on container replacement. Rebuild neptune_sim with
+/tmp/neptune-p3-{build,install,log} and installed Stonefish overlay as in P1/P2.
+Rollback: original baseline scene remains unchanged; to undo only P3, remove the
+added camera block and stop the two new TF publishers. P4 was not started; resolve
+camera stream performance/freshness before declaring P3 complete or starting it.
+
+## P2 launch history
 
 From the repository root with the existing dev container running, and no other
 simulator owning the same topics, use the build verified in this session:

@@ -17,6 +17,9 @@ setup(
         ('share/neptune_sim/scenarios', [
             'scenarios/neptune_girona_perception.scn',
         ]),
+        ('share/neptune_sim/launch', [
+            'launch/perception_camera.launch.py',
+        ]),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

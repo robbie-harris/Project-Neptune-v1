@@ -399,5 +399,15 @@
         <color rgb="1.0 1.0 1.0"/>
     </light>
 
+    <!-- P3: optical +Z points body +X; +X right/+Y down in the image. -->
+    <sensor name="inspection_camera_optical_frame" type="camera" rate="10.0">
+        <link name="Vehicle"/>
+        <origin xyz="0.82 0.0 0.20" rpy="1.5707963267948966 0.0 1.5707963267948966"/>
+        <specs resolution_x="640" resolution_y="480" horizontal_fov="145.0"/>
+        <rendering minimum_distance="0.05" maximum_distance="20.0"/>
+        <!-- No frame override: native image and CameraInfo share the sensor name. -->
+        <ros_publisher topic="/neptune/camera/inspection"/>
+    </sensor>
+
 </robot>
 </scenario>
