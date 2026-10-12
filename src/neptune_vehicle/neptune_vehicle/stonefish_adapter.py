@@ -1,8 +1,12 @@
+import signal
+
 import rclpy
 from rclpy.node import Node
+from rclpy.signals import SignalHandlerOptions
 
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Float64MultiArray
+from rcl_interfaces.msg import ParameterDescriptor
 
 
 def clamp(value: float) -> float:
@@ -13,6 +17,14 @@ class StonefishVehicleAdapter(Node):
 
     def __init__(self):
         super().__init__('stonefish_vehicle_adapter')
+
+        # Startup-only mode: pair with the matching five/seven-motor scenario.
+        self.declare_parameter(
+            'motor_count', 5, ParameterDescriptor(read_only=True),
+        )
+        self.motor_count = self.get_parameter('motor_count').value
+        if self.motor_count not in (5, 7):
+            raise ValueError('motor_count must be 5 (legacy) or 7 (perception)')
 
         self.thruster_pub = self.create_publisher(
             Float64MultiArray,
@@ -52,6 +64,8 @@ class StonefishVehicleAdapter(Node):
         # 2 HeaveBow
         # 3 HeaveStern
         # 4 Sway
+        # 5 SwayFront (perception mode only)
+        # 6 SwayRear (perception mode only)
         msg.data = [
             clamp(surge - yaw),
             clamp(surge + yaw),
@@ -59,6 +73,10 @@ class StonefishVehicleAdapter(Node):
             clamp(-heave),
             clamp(sway),
         ]
+        if self.motor_count == 7:
+            # Matched +Y force axes and opposing propeller reaction torques.
+            # Mounts have equal fore/aft CG moment arms. Motor 4 is preserved.
+            msg.data.extend([clamp(sway), clamp(sway)])
 
         self.thruster_pub.publish(msg)
 
@@ -86,7 +104,13 @@ class StonefishVehicleAdapter(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    # Keep the ROS context alive until the final zero array is published.
+    # rclpy's default signal handler shuts it down before the finally block.
+    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
+    old_handlers = {
+        sig: signal.signal(sig, signal.default_int_handler)
+        for sig in (signal.SIGINT, signal.SIGTERM)
+    }
 
     node = StonefishVehicleAdapter()
 
@@ -98,6 +122,8 @@ def main(args=None):
         node.publish_thrusters(0.0, 0.0, 0.0)
         node.destroy_node()
         rclpy.shutdown()
+        for sig, handler in old_handlers.items():
+            signal.signal(sig, handler)
 
 
 if __name__ == '__main__':

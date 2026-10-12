@@ -81,7 +81,7 @@
 		<world_transform rpy="0.0 0.0 0.0" xyz="5.0 0.0 1.0"/>
 	</dynamic>
 
-    <include file="neptune_girona.scn">
+    <include file="$(find neptune_sim)/scenarios/neptune_girona_perception.scn">
 		<arg name="robot_name" value="GIRONA500"/>
 		<arg name="robot_position" value="0.0 0.0 1.0"/>
 	</include>

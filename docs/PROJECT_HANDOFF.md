@@ -1251,3 +1251,84 @@ body/pipe overlap matches donor geometry; no CAD boolean union was performed.
 No full mission validation. Launch/build command is updated in
 `docs/PERCEPTION_INTEGRATION.md` to use /tmp/neptune-p1b-install.
 No P2 work, commit, merge, cherry-pick, or push.
+
+
+# 23. Perception integration P2 implementation / validation record
+
+**P2 implemented: Girona lateral pair and inspection lamps.** Focused tests,
+builds, resource checks, and headless native actuation passed. Full graphical
+actuation remains unvalidated due native ROS service/command stalls (failed
+checks retained below). P3 camera is next, NOT started. Stage 2 remains frozen
+through S2.6; S2.7–S2.14 not started.
+
+Optional scene now includes installed scenarios/neptune_girona_perception.scn,
+a separate copy of baseline Girona plus additions. Original Girona and baseline
+port-pipe scene are unchanged. Original body/sensors/first five motor XML blocks
+are identical; no new mass/buoyancy/collision/hydrodynamic body parts. No autonomy,
+controls, localization, camera, perception runtime, Roboflow, GUI, or evaluation
+infrastructure changes. /neptune/cmd_body remains the sole motion input and
+/sim/odometry remains evaluation-only.
+
+Ordering: 0 SurgePort, 1 SurgeStarboard, 2 HeaveBow, 3 HeaveStern, 4 Sway,
+5 SwayFront, 6 SwayRear. New XYZ/RPY (metres/radians): front
+(0.75,0,0.05431)/(0,0,pi/2); rear (-0.89647,0,0.05431)/(0,0,pi/2).
+Computed unchanged Girona CG ~(-0.07323476,0.00026649,0.05430864) m gives equal
+opposite ~0.823235 m longitudinal pair arms. Propeller disks clear hull/camera;
+mount supports/tunnel effects are not modeled. Mass 143.146 kg and native
+principal inertias 95.384/126.947/135.515 kg m² remain unchanged.
+
+Donor parameters (SHA 608a3b985b8c5dbfc56f5398b8679c8038861bbe) adapted to Girona:
+0.12 m diameter, max 314.16 rad/s normalized, forward/reverse kt 0.48, kq 0.05,
+first-order rotor constant 0.15 s. Existing propeller mesh scaled 2/3; front
+right-handed/not inverted, rear left-handed/inverted. Native local +X force
+rotates to body +Y; inversion/handedness give matching positive thrust and opposing
+reaction torque. Pair yaw moments nominally cancel; historical motor 4 is retained.
+
+Adapter read-only startup motor_count defaults to 5, accepts only 5/7. C=clip to
+[-1,1]: legacy [C(surge-yaw),C(surge+yaw),C(-heave),C(-heave),C(sway)]; seven mode
+appends [C(sway),C(sway)], preserving outputs 0–4 exactly. All seven watchdog and
+shutdown outputs zero. Shutdown signal handling corrected after observing old
+ROS-context invalidation before final zero publication. Baseline mapping and
+0.5 s timeout remain. Packaging installs the optional robot include; vehicle
+package declares rcl_interfaces for the read-only parameter descriptor.
+
+InspectionLightPort/Starboard XYZ (0.76,-0.24,0.5)/(0.76,+0.24,0.5), both
+RPY (pi/2,0,pi/2), white, 800 lux, 0.015 m radius, 90° full cone. Optical +Z
+maps to body +X; camera unchanged. Static cone geometry covers fixture centers
+at inspection standoff (nearest lamp to valve/flange 42.57° <45°). Actual lit
+appearance/shadows are not verified; daylight/original Omni remain present.
+
+Validation: 17 focused adapter tests passed in both modes, exact historical
+output, clamping, readonly mode, watchdog, and shutdown. Initial fixture cleanup
+errors were corrected; no acceptance weakened. Python compile checks passed;
+neptune_vehicle/neptune_sim colcon builds passed (2 packages, installed Stonefish
+overlay warning). XML/resources (23 references), installed equality, baseline
+vehicle preservation, CG balance, rotor clearance and light cone checks passed;
+git diff --check passed.
+
+Graphical scene loaded seven thrusters/lights with unchanged Girona physics.
+At 800x600 and 320x240 native service requests stalled; one test delivered seven
+ROS values but sampled zero native thrust/no useful sway. **Graphical actuation
+checks failed/incomplete**, not counted as successful motion validation.
+Render/executor starvation is suspected but unproven. Nonfatal SDL2 unsupported
+operation and texture-channel warnings persisted. Bounded cleanup killed native
+graphical processes; no owned processes remained. No simulator-source/renderer
+changes were made to work around this.
+
+A temporary physics-only derivative removed graphics sensors/lights, preserving
+body/motors/world/fixtures. Two four-second +/-0.22 pure sway pulses at inspection
+position/yaw pi passed: body lateral displacement +0.15718/-0.15407 m; yaw
+-0.09904/+0.08339 degrees. Added front/rear native thrust +11.494/+11.472 N and
+-11.494/-11.474 N. Live legacy output matched exactly; watchdog and SIGINT
+shutdown published seven zeros; watchdog native setpoints also zero. Motion
+truth was evaluation-only, never used to generate commands. Pure sway supplied
+no depth trim, so vehicle rose ~0.26 m; no inspection/mission claim. Headless
+results do not establish graphical mission readiness.
+
+Evidence in container /tmp/neptune-p2-smoke-result.json, physics/simulator and
+adapter logs. Full graphical actuation, actual lamp illumination, hardware
+mount feasibility and future alignment tuning remain limitations. Pipe/flange/
+valve retained; wedge absent and not fabricated. Model/detector remain absent.
+See docs/PERCEPTION_INTEGRATION.md for complete mapping, launch/build commands,
+legacy rollback and runtime limitations. No P3, mission, perception, GUI,
+commit, push, merge or cherry-pick.

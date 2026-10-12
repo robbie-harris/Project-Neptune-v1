@@ -14,6 +14,9 @@ setup(
         ('share/neptune_sim/scenarios/benchmarks', [
             'scenarios/benchmarks/03_port_pipe_perception.scn',
         ]),
+        ('share/neptune_sim/scenarios', [
+            'scenarios/neptune_girona_perception.scn',
+        ]),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
