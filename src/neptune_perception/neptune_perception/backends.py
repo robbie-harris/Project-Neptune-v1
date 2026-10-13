@@ -14,7 +14,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 class LocalInference:
-    def __init__(self, url, timeout):
+    def __init__(self, url, timeout, route='/infer'):
         parsed = urlparse(url)
         if (parsed.scheme != 'http' or parsed.hostname not in ('127.0.0.1', 'localhost')
                 or parsed.username or parsed.password or parsed.query or parsed.fragment
@@ -22,11 +22,14 @@ class LocalInference:
             raise ValueError('Inference URL must be local loopback HTTP')
         if timeout <= 0 or timeout > 120:
             raise ValueError('Request timeout must be in (0, 120] seconds')
+        if route not in ('/infer', '/infer/orientation_a'):
+            raise ValueError('Unknown local detector route')
         self.url, self.timeout = url.rstrip('/'), timeout
+        self.route = route
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
 
     def infer(self, png):
-        request = Request(self.url+'/infer', data=png,
+        request = Request(self.url+self.route, data=png,
                           headers={'Content-Type': 'image/png'}, method='POST')
         try:
             with self.opener.open(request, timeout=self.timeout) as response:

@@ -1,4 +1,4 @@
-# Perception integration — P1 / P2 / P3 / P4a
+# Perception integration — P1 / P2 / P3 / P4a / P4b
 
 P0 audit complete. P1a added the optional pipe/flange scene; P1b adds its valve.
 P2 lateral thrusters + lights is implemented; unit/build and physics actuation
@@ -6,8 +6,9 @@ checks pass, but full graphical actuation remains unverified because simulator
 ROS callbacks stalled. **P3 COMPLETE WITH PERCEPTION PROFILE**: the explicit
 320x240 software performance profile passes the minimum >=5 Hz / <0.5 s gate.
 Configured 10 Hz is not achieved wall throughput. **P4a COMPLETE: observation-only
-Inspection Objects pipeline; bounded GPU smoke passed. P4b next: Orientation A1,
-not started. P5 not started.**
+Inspection Objects pipeline; bounded GPU smoke passed. P4b COMPLETE: A1 robust
+pipe detector, with no physical orientation estimate. P4c next: dual-model
+association, not started. P5 not started.**
 Polished rendering is deferred to P8. Stage 2 remains frozen
 through S2.6. The environment now contains pipe, flange, and valve categories;
 Inspection Objects is integrated; orientation estimation remains unavailable.
@@ -1166,3 +1167,183 @@ Read-only offline credential scan through the mounted secret found its value in
 observer never sees the key and its actual log was empty. No credential entered
 the repository or logs. No Orientation A integration, pipe-angle estimation,
 visual control, P5, commit or push. Both required project documents were updated.
+
+
+## P4b Orientation A1 robust pipe detector — COMPLETE (2026-10-12)
+
+**P4b COMPLETE; ONE bounded A1-only GPU smoke passed. P4a still passes unchanged.
+P4c next: dual-model association, NOT STARTED. P5 NOT STARTED.** This supersedes
+historical P4b-not-started statements above. Stage 2 remains frozen through S2.6.
+
+### Semantics and model
+
+Exact A1/t1 model: **projects-zwfft/neptune-pipe-orientation-a-3-yolo11n-t1**.
+Workspace projects-zwfft, project neptune-pipe-orientation-a, dataset version **3**,
+YOLO11n. Expected class schema exactly **pipe**. Confidence **0.05**, NMS IoU
+**0.7**, max detections **300**, unchanged from the task settings.
+
+“Orientation A” refers to broader pipe orientations/viewpoints in the training
+distribution. **This is a robust single-class pipe detector, NOT an angle
+estimator.** Its output is an axis-aligned pipe bounding box. It produces no
+physical pipe angle, rotated box, orientation category, keypoints or mask.
+`orientation_valid=false` always; shared `orientation_rad` remains null. Bbox
+rotation defaults describe an axis-aligned rectangle; bbox aspect ratio and
+geometry never populate a physical angle.
+
+Input is the **full received frame**, lossless PNG, followed by the managed
+model's configured preprocessing. No pipe ROI crop or local resize. A1 was
+trained/evaluated on full **640x480** images; runtime uses **320x240**, 145-degree
+HFOV, accepted P3 software profile (prior validated ~5.399 Hz). Equivalent
+accuracy at 320x240 is **not claimed**.
+
+### Shared server and independent observations
+
+Same existing inspection_inference service, secure read-only
+`/run/secrets/roboflow_api_key` mount and linux/amd64 GPU image pin:
+
+```text
+roboflow/roboflow-inference-server-gpu@sha256:9f91f44c23c067c03182c5b1de4213e5bdd97e393cd412c9bb4bdabdf5bdca29
+```
+
+No Docker/credential/CUDA configuration changes or second GPU server. Two
+independent model slots load lazily and remain in the same serial server:
+
+| Model | Inference route | Model-specific health |
+| --- | --- | --- |
+| Inspection Objects (P4a) | POST /infer | GET /health |
+| A1 robust pipe (P4b) | POST /infer/orientation_a | GET /health/orientation_a |
+
+Both accept full-frame image/png requests through the existing backend and
+retain independent model/schema/CUDA evidence. P4a's defaults, routes, outputs,
+configuration, launch and tests are unchanged. A1 uses a small subclass of the
+existing latest-frame observer plus explicit model/class validation. Each client
+uses its model-specific health; `/health` continues to describe Inspection
+Objects, including when only A1 is loaded. Actual P4b smoke loaded/exercised only
+A1; P4a's session remained unloaded. Simultaneous operation is unmeasured; P4c
+will decide scheduling and association. No fusion or N=2 scheduling is present.
+
+| Topic | Message / data |
+| --- | --- |
+| /neptune/camera/inspection/image_color | sensor_msgs/Image, input only |
+| /neptune/perception/orientation_a_detections | vision_msgs/Detection2DArray, pipe class/confidence, axis-aligned bbox center/extents |
+| /neptune/perception/orientation_a_annotated | sensor_msgs/Image, bgr8, exact same accepted source frame |
+| /neptune/perception/orientation_a_status | std_msgs/String JSON, robust pipe observation and freshness metadata |
+
+Despite the topic names, **none reports physical orientation**. Array, individual
+detection and annotated headers copy the original source sec/nanosec/frame_id:
+`GIRONA500/inspection_camera_optical_frame`. Status retains model ID, source
+header, image width/height, each pipe's confidence/clipped xyxy/center/normalized
+errors, request start/end, processing latency, observation age, receipt age, last
+valid stamp, camera silence, runtime evidence and frame counters. Error formulas:
+horizontal `(u-width/2)/(width/2)`, vertical `(v-height/2)/(height/2)`; positive
+right/down. Orientation validity is false at the top level and per detection;
+orientation_rad is null regardless of bbox shape.
+
+Depth-one BEST_EFFORT/VOLATILE input, one latest pending frame, one worker/request
+in flight. A1 alone attempts inference on **every fresh frame when idle**, with
+new arrivals replacing pending old frames while busy. No N=2 sampling or backlog.
+Already-stale pending inputs are discarded. Same initial engineering threshold
+**0.5 s**, steady-clock 20 Hz watchdog and explicit READY, NO_DETECTION, STALE,
+MODEL_UNAVAILABLE, CAMERA_STALE and SCHEMA_ERROR states as P4a.
+
+A1 **rejects stale completions before publishing detection arrays or annotated
+images**. Their status observations are empty and observation_valid=false;
+source/timing/GPU diagnostics remain visible. They do not update the last valid
+observation; `rejected_stale_results` counts them. Successful observations later
+expire via the existing watchdog. P4a retains its pre-existing timestamped stale
+diagnostic outputs and its original status shape.
+
+### Build and run
+
+Reuse the existing dev container and P3 camera setup. Build A1 and the unchanged
+P4a entrypoint together:
+
+```bash
+docker compose -f docker/compose.yaml exec -T dev bash -lc '
+  source /opt/ros/jazzy/setup.bash
+  cd /workspace
+  colcon --log-base /tmp/neptune-p4b-log build \
+    --build-base /tmp/neptune-p4b-build \
+    --install-base /tmp/neptune-p4b-install --packages-select neptune_perception
+'
+docker compose -f docker/compose.perception.yaml up -d inspection_inference
+docker compose -f docker/compose.yaml exec -T dev bash -lc '
+  source /opt/ros/jazzy/setup.bash
+  source /tmp/neptune-p4b-install/setup.bash
+  ros2 launch neptune_perception orientation_a.launch.py
+'
+```
+
+Use the same ROS domain as the camera. This launch starts only A1, with no
+Inspection Objects node, simulator, adapter, mission or controller. The existing
+P3 performance launch supplies camera frames independently. Stop A1 and the
+owned inference service to return to P3; selecting the original
+inspection_objects.launch.py still runs P4a with its original contract.
+
+Focused ROS-sourced tests use the P4a documented PYTHONPATH and pytest package
+directory. **46 new/additive tests passed (0.63 s)** and **all 62 original P4a
+tests passed unchanged (0.48 s)**, 108 total. Covers correct model/schema,
+unexpected valve/flange rejection, malformed responses, clipping/centers/errors,
+empty predictions, source/latency/receipt stale completion, loss states, latest
+replacement, every-fresh-frame dispatch, preserved headers, full-frame/fixed
+settings/CUDA adapter, false orientation and independent server routing. An
+additive test preserves P4a's existing stale-diagnostic behavior; no original
+test or acceptance criterion was changed. Final neptune_perception build:
+**1 package, 0.63 s**. Both installed launches, Python/Bash syntax and diff checks pass.
+
+The explicit bounded runner is `./scripts/run_p4b_smoke.sh`, requiring the
+documented P3/P4b installed overlays. It shares P4a's runtime lock, requires an
+idle inference service, owns start/stop, uses isolated ROS domain **84**, and
+creates temporary fixed-pose XML from the official P3 helper. One 125 s startup/
+model deadline, one 20 s warm window, inner 165 s/outer 175 s execution bounds,
+bounded process cleanup. It reuses P4a's header/cleanup helpers. No mission or
+actuator commands. The first sandbox invocation was denied Docker access before
+startup; the approved retry performed the **single actual live smoke**.
+
+### Live evidence and limits
+
+**PASS**: exact A1 loaded, schema pipe-only accepted, current camera frames reached
+GPU inference, all three A1 ROS output topics published with preserved source
+headers. RTX 4080 Laptop GPU visible in the existing container; Windows driver
+**551.95**, advertised CUDA **12.4**. Actual model ONNX profiling: **238 node
+events, all CUDAExecutionProvider**; automatic CPU fallback remained disabled.
+
+| Metric | Actual A1-only measurement |
+| --- | --- |
+| Warm window | 20.000936789 s |
+| Camera | 123 frames; 6.149711951 FPS |
+| Accepted processed output | 124 frames; 6.199709609 FPS |
+| Warm latency mean / median | 55.912 / 66.154 ms |
+| Warm latency p95 / max | 92.284 / 114.415 ms |
+| Cold first request/model initialization | 15.437542 s, STALE, output rejected |
+| Valid observation age mean / max | 0.104143 / 0.185886 s at first status receipt per warm result |
+| Pipe boxes over the whole smoke | 879 |
+| Matched source detection/annotated pairs | 125 |
+| Max pending / in flight | 1 / 1 |
+| Pending replacements / rejected stale completions | 102 / 1 |
+| Camera loss | CAMERA_STALE; observation_valid=false |
+| Orientation validity | false; angle null throughout |
+| P4a/command/thruster output publishers | zero |
+
+An in-flight result crosses the warm-window boundary, explaining processed count
+one above received camera count; the checker found no duplicate source array.
+Boxes include multiple visible pipe sections, overlaps and low-confidence extra
+boxes; they are not unique-object counts or accuracy metrics. Confidence was
+not tuned. READY, initial MODEL_UNAVAILABLE, STALE and CAMERA_STALE were observed;
+empty/schema/loss handling also has focused test coverage.
+
+Single short fixed-pose evidence proves integration, not accuracy across broad
+viewpoints, dynamic operation, long-term reliability or real-ocean performance.
+Full 640x480 training/evaluation versus full 320x240 runtime remains a known
+mismatch. Native stamps are readback/publication time, not verified capture time.
+Cold load exceeds freshness. P4a's bounded request/shutdown and suppressed
+dependency-log limitations remain; simultaneous dual-model contention is untested.
+
+Evidence: container `/tmp/neptune-p4b-smoke-8xf6mmd4/{result.json,simulator.log,
+detector.log,*.scn}`; host `/tmp/neptune-p4b-live-result.json`. /tmp is temporary.
+All owned simulator/A1 observer processes exited; inference stopped cleanly
+with exit **0**. Actual observer log was empty. Offline read-only credential
+audit through the unchanged mount found the key in **zero of 234 repository
+files**, without printing it. No secret entered source or logs. Both documents
+were updated. **P4c dual-model association, P5, pipe angles, control and fusion
+were not started. No commit or push occurred.**

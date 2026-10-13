@@ -6,21 +6,24 @@ from threading import Lock
 
 MODEL_ID = 'projects-zwfft/neptune-inspection-objects-2-yolo11n-t1'
 CLASSES = frozenset(('pipe', 'valve', 'flange'))
+A1_MODEL_ID = 'projects-zwfft/neptune-pipe-orientation-a-3-yolo11n-t1'
+A1_CLASSES = frozenset(('pipe',))
 
 
 class SchemaError(ValueError):
-    """The model or its response does not match Inspection Objects."""
+    """The model or response does not match the selected detector contract."""
 
 
 class ModelUnavailable(RuntimeError):
     """Local runtime or model is unavailable; message never includes remote data."""
 
 
-def validate_classes(classes):
-    if (not isinstance(classes, list) or len(classes) != 3
+def validate_classes(classes, expected_classes=CLASSES):
+    if (not isinstance(classes, list) or len(classes) != len(expected_classes)
             or any(not isinstance(c, str) for c in classes)
-            or set(classes) != CLASSES):
-        raise SchemaError('Unexpected Inspection Objects class schema')
+            or set(classes) != expected_classes):
+        raise SchemaError('Unexpected Inspection Objects class schema'
+                          if expected_classes == CLASSES else 'Unexpected A1 pipe class schema')
 
 
 def number(value):
@@ -48,14 +51,14 @@ class Observation:
                     orientation_valid=False, orientation_rad=None)
 
 
-def parse_response(response, width, height):
+def parse_response(response, width, height, model_id=MODEL_ID, expected_classes=CLASSES):
     # Adapt donor decode_predictions' finite-value, class and xywh -> xyxy
     # checks, with mandatory model schema/dimensions and stricter invalid boxes.
     if width <= 0 or height <= 0 or not isinstance(response, dict):
         raise SchemaError('Invalid response or image dimensions')
-    if response.get('model_id') != MODEL_ID:
+    if response.get('model_id') != model_id:
         raise SchemaError('Unexpected model ID')
-    validate_classes(response.get('classes'))
+    validate_classes(response.get('classes'), expected_classes)
     runtime = response.get('runtime')
     if (not isinstance(runtime, dict)
             or not isinstance(runtime.get('providers'), list)
@@ -72,13 +75,13 @@ def parse_response(response, width, height):
     for prediction in predictions:
         if (not isinstance(prediction, dict)
                 or not isinstance(prediction.get('class'), str)
-                or prediction.get('class') not in CLASSES):
+                or prediction.get('class') not in expected_classes):
             raise SchemaError('Unexpected prediction class')
         c = number(prediction.get('confidence'))
         if 'class_id' in prediction:
             class_id = prediction['class_id']
             if (isinstance(class_id, bool) or not isinstance(class_id, int)
-                    or not 0 <= class_id < 3
+                    or not 0 <= class_id < len(expected_classes)
                     or response['classes'][class_id] != prediction['class']):
                 raise SchemaError('Prediction class ID/name mismatch')
         x, y, w, h = (number(prediction.get(k)) for k in ('x', 'y', 'width', 'height'))

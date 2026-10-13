@@ -13,7 +13,7 @@ import signal
 import subprocess
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from .core import MODEL_ID, SchemaError, validate_classes
+from .core import A1_CLASSES, A1_MODEL_ID, CLASSES, MODEL_ID, SchemaError, validate_classes
 
 SECRET_PATH = '/run/secrets/roboflow_api_key'
 
@@ -38,7 +38,9 @@ def silence_dependency_output():
 
 
 class GPUModel:
-    def __init__(self):
+    def __init__(self, model_id=MODEL_ID, expected_classes=CLASSES):
+        self.model_id = model_id
+        self.expected_classes = expected_classes
         self.model = None
         self.evidence = None
         self.profile_pending = False
@@ -49,9 +51,9 @@ class GPUModel:
         from inference import get_model
 
         key = read_secret()
-        model = get_model(model_id=MODEL_ID, api_key=key,
+        model = get_model(model_id=self.model_id, api_key=key,
                           onnxruntime_execution_providers=['CUDAExecutionProvider'])
-        validate_classes(model.class_names)
+        validate_classes(model.class_names, self.expected_classes)
         if 'CUDAExecutionProvider' not in model.onnx_session.get_providers():
             raise RuntimeError('CUDA session unavailable')
         # Profile the actual model session rather than equating an available
@@ -112,14 +114,18 @@ class GPUModel:
         if response.get('image') != expected_image:
             raise SchemaError('Unexpected inference dimensions')
         self.error = None
-        return dict(model_id=MODEL_ID, classes=list(self.model.class_names),
+        return dict(model_id=self.model_id, classes=list(self.model.class_names),
                     runtime=self.evidence, image=expected_image,
                     predictions=response.get('predictions'))
 
 
 def serve(bind='0.0.0.0', port=9001):
     silence_dependency_output()
-    runtime = GPUModel()
+    # Independent, lazily loaded sessions in the same serial GPU server. No
+    # fusion, paired-result association or dual-model scheduling is performed.
+    runtimes = {'/infer': GPUModel(),
+                '/infer/orientation_a': GPUModel(A1_MODEL_ID, A1_CLASSES)}
+    health_routes = {'/health': '/infer', '/health/orientation_a': '/infer/orientation_a'}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -134,16 +140,18 @@ def serve(bind='0.0.0.0', port=9001):
             self.wfile.write(data)
 
         def do_GET(self):
-            if self.path != '/health':
+            if self.path not in health_routes:
                 self.reply(404, {'state': 'MODEL_UNAVAILABLE'})
                 return
-            self.reply(200, dict(model_id=MODEL_ID, state=runtime.error or 'READY',
+            runtime = runtimes[health_routes[self.path]]
+            self.reply(200, dict(model_id=runtime.model_id, state=runtime.error or 'READY',
                                  runtime=runtime.evidence))
 
         def do_POST(self):
-            if self.path != '/infer':
+            if self.path not in runtimes:
                 self.reply(404, {'state': 'MODEL_UNAVAILABLE'})
                 return
+            runtime = runtimes[self.path]
             self.connection.settimeout(10)
             try:
                 size = int(self.headers.get('Content-Length', '0'))

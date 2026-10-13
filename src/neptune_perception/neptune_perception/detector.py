@@ -17,7 +17,7 @@ from std_msgs.msg import String
 from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose
 
 from .backends import LocalInference
-from .core import Freshness, LatestFrame, MODEL_ID, SchemaError, parse_response
+from .core import CLASSES, Freshness, LatestFrame, MODEL_ID, SchemaError, parse_response
 
 # Adapted from lumyn/Perception backends.py at 608a3b985b8c5dbfc56f5398b8679c8038861bbe.
 COLORS = {'pipe': (0, 255, 0), 'valve': (255, 180, 0), 'flange': (220, 80, 255)}
@@ -64,12 +64,22 @@ def annotate(bgr, observations):
 
 
 class InspectionObjects(Node):
+    # P4a defaults are retained; the A1 subclass changes only its contract.
+    node_name = 'inspection_objects'
+    model_id = MODEL_ID
+    expected_classes = CLASSES
+    inference_route = '/infer'
+    detection_topic = '/neptune/perception/object_detections'
+    annotated_topic = '/neptune/perception/annotated'
+    status_topic = '/neptune/perception/status'
+    reject_stale_completions = False
+
     def __init__(self):
-        super().__init__('inspection_objects')
+        super().__init__(self.node_name)
         url = self.declare_parameter('inference_url', 'http://127.0.0.1:9001').value
         freshness = self.declare_parameter('freshness_s', 0.5).value
         timeout = self.declare_parameter('request_timeout_s', 120.0).value
-        self.backend = LocalInference(url, timeout)
+        self.backend = LocalInference(url, timeout, self.inference_route)
         self.bridge = CvBridge()
         self.slot = LatestFrame()
         self.freshness = Freshness(time.monotonic(), freshness)
@@ -80,11 +90,12 @@ class InspectionObjects(Node):
                             observations=[], runtime=None)
         self.processed = 0
         self.discarded_stale = 0
+        self.rejected_stale_results = 0
         self.started = time.monotonic()
         self.detections = self.create_publisher(
-            Detection2DArray, '/neptune/perception/object_detections', 1)
-        self.annotated = self.create_publisher(Image, '/neptune/perception/annotated', 1)
-        self.status = self.create_publisher(String, '/neptune/perception/status', 1)
+            Detection2DArray, self.detection_topic, 1)
+        self.annotated = self.create_publisher(Image, self.annotated_topic, 1)
+        self.status = self.create_publisher(String, self.status_topic, 1)
         qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT,
                          durability=DurabilityPolicy.VOLATILE)
         self.subscription = self.create_subscription(
@@ -105,7 +116,8 @@ class InspectionObjects(Node):
             if not ok:
                 raise SchemaError('Image encoding failed')
             response = self.backend.infer(encoded.tobytes())
-            observations = parse_response(response, image.width, image.height)
+            observations = parse_response(response, image.width, image.height,
+                                          self.model_id, self.expected_classes)
             return start, time.monotonic(), bgr, observations, response['runtime'], None
         except Exception as error:
             state = 'SCHEMA_ERROR' if isinstance(error, (SchemaError, ValueError)) else 'MODEL_UNAVAILABLE'
@@ -123,12 +135,19 @@ class InspectionObjects(Node):
             if error:
                 self.freshness.fail(error, end)
             else:
+                last_valid_stamp = self.freshness.last_valid_observation
                 self.freshness.finish(stamp_seconds(image.header), start, end, ros_now, observations)
-                self.detections.publish(detection_message(image.header, observations))
-                annotated = self.bridge.cv2_to_imgmsg(annotate(bgr, observations), encoding='bgr8')
-                annotated.header = deepcopy(image.header)
-                self.annotated.publish(annotated)
-                self.processed += 1
+                if self.reject_stale_completions and not self.freshness.snapshot(now, ros_now)['observation_valid']:
+                    self.freshness.last_valid_observation = last_valid_stamp
+                    self.freshness.state = 'STALE'
+                    self.rejected_stale_results += 1
+                    self.observation_context['observations'] = []
+                else:
+                    self.detections.publish(detection_message(image.header, observations))
+                    annotated = self.bridge.cv2_to_imgmsg(annotate(bgr, observations), encoding='bgr8')
+                    annotated.header = deepcopy(image.header)
+                    self.annotated.publish(annotated)
+                    self.processed += 1
             self.future = self.frame = None
         if self.future is None:
             pending = self.slot.take()
@@ -141,11 +160,13 @@ class InspectionObjects(Node):
                     self.frame = image
                     self.freshness.begin(stamp_seconds(image.header), now)
                     self.future = self.pool.submit(self.infer, image)
-        contract = dict(model_id=MODEL_ID, orientation_valid=False,
+        contract = dict(model_id=self.model_id, orientation_valid=False,
                         **self.observation_context, **self.freshness.snapshot(now, ros_now),
                         **self.slot.counts(), in_flight=int(self.future is not None),
                         processed_frames=self.processed, discarded_stale_frames=self.discarded_stale,
                         processed_fps=self.processed/(now-self.started))
+        if self.reject_stale_completions:
+            contract['rejected_stale_results'] = self.rejected_stale_results
         self.status.publish(String(data=json.dumps(contract, allow_nan=False)))
 
     def close(self):
@@ -153,9 +174,9 @@ class InspectionObjects(Node):
         self.pool.shutdown(wait=True, cancel_futures=True)
 
 
-def main(args=None):
+def run(node_type, args=None):
     rclpy.init(args=args)
-    node = InspectionObjects()
+    node = node_type()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -165,3 +186,7 @@ def main(args=None):
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+
+
+def main(args=None):
+    run(InspectionObjects, args)
