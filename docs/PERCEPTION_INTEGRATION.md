@@ -1,4 +1,4 @@
-# Perception integration — P1 / P2 / P3 / P4a / P4b
+# Perception integration — P1 / P2 / P3 / P4a / P4b / P4c
 
 P0 audit complete. P1a added the optional pipe/flange scene; P1b adds its valve.
 P2 lateral thrusters + lights is implemented; unit/build and physics actuation
@@ -7,8 +7,8 @@ ROS callbacks stalled. **P3 COMPLETE WITH PERCEPTION PROFILE**: the explicit
 320x240 software performance profile passes the minimum >=5 Hz / <0.5 s gate.
 Configured 10 Hz is not achieved wall throughput. **P4a COMPLETE: observation-only
 Inspection Objects pipeline; bounded GPU smoke passed. P4b COMPLETE: A1 robust
-pipe detector, with no physical orientation estimate. P4c next: dual-model
-association, not started. P5 not started.**
+pipe detector, with no physical orientation estimate. P4c COMPLETE: exact-source dual-model association, N=1/N=1 GPU smoke passed
+at 6.697 Hz fresh selected targets. P5 next only when assigned, not started.**
 Polished rendering is deferred to P8. Stage 2 remains frozen
 through S2.6. The environment now contains pipe, flange, and valve categories;
 Inspection Objects is integrated; orientation estimation remains unavailable.
@@ -1347,3 +1347,202 @@ audit through the unchanged mount found the key in **zero of 234 repository
 files**, without printing it. No secret entered source or logs. Both documents
 were updated. **P4c dual-model association, P5, pipe angles, control and fusion
 were not started. No commit or push occurred.**
+
+
+## P4c dual-model execution + pipe association — COMPLETE (2026-10-12)
+
+**P4c COMPLETE: one bounded N=1/N=1 dual-model GPU smoke PASSED. P5 is next
+only when explicitly assigned; P5 NOT STARTED.** This supersedes historical
+P4c-not-started statements. Stage 2 remains frozen through S2.6.
+
+### Architecture and output contract
+
+The independent, verified Inspection Objects and Orientation A observers receive
+full identical camera frames from `/neptune/camera/inspection/image_color`.
+Existing P4a/P4b code, configurations, launches and topics are unchanged. Both
+use the existing serial GPU server and unchanged secure mounted secret:
+
+- Inspection Objects: `projects-zwfft/neptune-inspection-objects-2-yolo11n-t1`.
+- A1: `projects-zwfft/neptune-pipe-orientation-a-3-yolo11n-t1`.
+
+`pipe_fusion` consumes the existing `/neptune/perception/status` and
+`/neptune/perception/orientation_a_status` JSON observations, rather than joining
+arrays to a second dimensions/status stream. These already carry source headers,
+dimensions, bbox geometry, separate confidence values, provenance and freshness.
+`neptune_interfaces` currently contains only .gitkeep, no usable interface.
+No new custom ROS message package was necessary; standard messages are reused.
+
+| Output | Interface / contents |
+| --- | --- |
+| `/neptune/perception/fused_pipe_detections` | vision_msgs/Detection2DArray; every original pipe box retained, including both boxes in consensus; original confidence, source header, model ID in Detection2D.id |
+| `/neptune/perception/fused_semantic_detections` | vision_msgs/Detection2DArray; unchanged Inspection Objects valve/flange geometry/class/confidence/header, model ID in Detection2D.id |
+| `/neptune/perception/fused_status` | std_msgs/String JSON; authoritative unified observations, association records, selected_target, source header/dimensions, ages, valid flag, states and counters |
+
+The status `pipes` records retain inspection/orientation_a observations, both
+bbox arrays, both separate confidences, IoU (null when unmatched), association
+state and model_provenance. `semantic_detections` retain the original observation
+fields with the Inspection Objects model ID added. `selected_target` carries
+selected bbox, center, normalized horizontal/vertical errors, bbox_source,
+selected_source/model provenance, both confidences, IoU/state/valid. Source header,
+image_width/image_height and observation_age_s/receipt_age_s are shared top-level
+fields applying to that target. Missing target is null. `sequence` advances once
+per finalized source; watchdog repeats never count as new observations. Overall
+`valid` means a fresh selected pipe exists; NO_PIPE is a fresh completed frame
+with valid=false. Consumers must honor fused status/freshness; arrays are event
+outputs and do not latch a target's validity.
+
+**Physical pipe angle remains unavailable.** Top-level and every pipe/selected
+record retain `orientation_valid=false`; orientation_rad is null. No aspect
+ratio, Hough, PCA, angle estimation, controls, autonomy, localization or actuator
+work was implemented. No truth input exists.
+
+### Matching, association and selection
+
+Cache key is exact integer source sec/nanosec, never floating-point time or
+receipt proximity. Frame ID and width/height must also agree before fusion.
+Greedy one-to-one association considers edges in descending IoU order at a
+configurable **IoU >= 0.30**, retaining unpaired boxes. Equal matching edges use
+stable input indices. This is a simple deterministic greedy matcher, not a
+maximum-total-IoU optimizer. Model confidences are never averaged or compared
+across models; box geometry is never averaged.
+
+Target policy: select the consensus pair with greatest IoU and use **Inspection
+Objects geometry**. Distinct pairs tied for greatest IoU within 1e-9 are
+AMBIGUOUS with no valid target. Without a pair, exactly one available pipe becomes
+INSPECTION_ONLY or ORIENTATION_A_ONLY; multiple unmatched boxes become AMBIGUOUS.
+Zero pipes becomes NO_PIPE. A1 can recover a pipe when Inspection Objects returns
+no pipe, regardless of valve/flange presence. Valve/flange need no A1 validation.
+Recovery and fallback are covered by pure tests; this fixed-pose smoke produced
+consensus only and does not claim live recovery-viewpoint accuracy.
+
+Default association window **0.20 s**, freshness **0.5 s**, capacity **8 source
+entries**, configured in config/pipe_fusion.yaml. The 20 Hz steady-clock watchdog
+expires unmatched entries, publishing a fresh single-model fallback without
+waiting indefinitely. Source age, original detector validity, request latency,
+original receipt age plus elapsed steady time are all checked. STALE completions
+are excluded, no stale geometry is emitted. Exact per-model source watermarks
+ignore repeated status/watchdog observations; finalized source watermarks reject
+late counterparts and prevent retroactive output. A newer finalized source drops
+older pending entries to preserve monotonic output. Capacity overflow finalizes
+oldest pending input as a fresh fallback or STALE, with an eviction counter;
+it cannot create an unbounded cache. Stale selected targets become invalid in
+the watchdog even during ROS-clock stalls. MODEL_UNAVAILABLE remains explicit
+at startup or after expired output and loss of both model feeds; individual
+model_states always remain available alongside fallback/STALE status.
+
+### Scheduling, validation and live evidence
+
+**Keep N=1 for BOTH models.** Each existing worker attempts every available fresh
+frame, with one replaceable pending slot and one in-flight request. Neither
+model is gated by the other's detections. The existing serial server remained
+adequate; no concurrency/server rewrite or N=2 sampling was needed. Exactly one
+live run occurred; no N=2 comparison, mission or command was run.
+
+- Pure P4c tests initially **40 passed**; final P4c coverage **50 tests passed**
+  (45 pure + 5 ROS adapter/watchdog). All **108 existing P4a/P4b tests unchanged**.
+  Final combined result **158 passed in 0.96 s**. Covers exact nanoseconds,
+  mismatched stamp/frame ID/dimensions, IoU/threshold, one-to-one/multiple pipes,
+  all selection states, recovery, stale/unavailable input, bounded cache/expiry,
+  late/repeated/older-frame suppression, normalized errors, semantic pass-through,
+  separate confidences, false orientation, ROS provenance/header and watchdog loss.
+- Initial Docker socket denial required approved access. First ROS test aborted
+  on synthetic integer bbox fields; explicit float conversion in the new adapter
+  fixed it, with no test weakening. Subsequent combined run: 153 passed; final
+  defensive stamp validation/cache tests raised the total to 158. These defensive
+  validation additions occurred after the smoke; they do not change valid-frame
+  runtime behavior. No additional live run was performed.
+- neptune_perception build passed before smoke (1 package, 0.79 s overall), final
+  build **1 package finished in 0.67 s** (package 0.59 s). Installed dual-model
+  launch --show-args, Python compilation, runner Bash syntax and diff checks pass.
+
+One isolated ROS-domain **86** test, official P3 camera-performance helper,
+temporary fixed inspection pose (-18.5,0,3), yaw pi; full **320x240 / 145-degree
+HFOV**, original Stonefish library, llvmpipe/eight workers/160x120 preview/low.
+Warm measurement window **20.010126297 s**:
+
+| Metric | Inspection Objects | Orientation A1 |
+| --- | --- | --- |
+| Warm processed frames / FPS | 134 / **6.696609** | 134 / **6.696609** |
+| Latency mean / median / p95 | **52.255 / 58.088 / 68.045 ms** | **34.525 / 35.772 / 41.452 ms** |
+| Latency maximum | 75.195 ms | 46.735 ms |
+| Warm pending replacements | **0** | **0** |
+| Whole-run pending replacements (includes cold loading) | 107 | 106 |
+| Warm stale completions | **0** | **0** |
+| Whole-run rejected stale completions | P4a has no rejection counter; fusion excludes invalid input | 2 |
+| Maximum pending / in flight | **1 / 1** | **1 / 1** |
+| Pending at warm start / end | **0 / 0** | **0 / 0** |
+
+Camera: **134 frames / 6.696609 FPS**. Fused finalized frames and valid selected
+targets: **134 / 6.696609 FPS**, above the preferred >=4 Hz. Source-stamp match
+rate: **134/134 = 100%** of fused outputs and warm camera frames. Counts:
+**CONSENSUS 134; INSPECTION_ONLY 0; ORIENTATION_A_ONLY 0; AMBIGUOUS 0; NO_PIPE 0;
+STALE 0; MODEL_UNAVAILABLE 0** during the warm window. Status/watchdog duplicates
+were excluded from output FPS/counts. Warm metrics count the full wall window.
+
+Association IoU: n=134, **mean 0.608455; median 0.608318; p95 0.637082;
+min 0.571611; max 0.642745**. Fresh selected observation age: mean **0.124983 s**,
+p95 **0.151465 s**, maximum **0.153091 s**. No cache eviction, frame mismatch or
+schema error appeared; final cache pending zero, three invalid/older inputs
+rejected over whole run. Cold model loading causes replacements and stale
+completions, as in P4a/P4b; it is not warm throughput or fresh output.
+
+Each loaded model independently reported **238 executed nodes, all
+CUDAExecutionProvider**, RTX 4080 Laptop GPU. ONNX lists both CUDA and CPU
+providers, but actual profiled nodes were CUDA-only and automatic execution
+fallback remains disabled. nvidia-smi: Windows driver **551.95**, advertised CUDA
+**12.4**, total VRAM **12282 MiB**. Point samples while run active: utilization
+**2–6%**, VRAM **924–1214 MiB** (startup sample 927 MiB); these are not averaged
+utilization measurements. A later GPU sample found the service already stopped.
+
+Valve **134** and flange **134** passed through with original Inspection Objects
+provenance. Orientation validity remained false. Camera stop produced fused
+**STALE / valid=false**. Zero command/thruster publishers. All owned observation
+processes exited, inference stopped cleanly (**exit 0**); all three observer logs
+were empty. No unbounded queue/backlog or freshness failure occurred in the warm
+window.
+
+Evidence: container `/tmp/neptune-p4c-smoke-21fmq_ws/{result.json,simulator.log,
+inspection_objects.log,orientation_a.log,pipe_fusion.log,*.scn}`; host
+`/tmp/neptune-p4c-live-result.json` and `/tmp/neptune-p4c-live-output.txt`.
+/tmp is temporary; numeric results are retained here. Existing secure secret
+mount/server configuration was reused unchanged; no key was read by the ROS
+observers or introduced into source, arguments or documents.
+
+### Running and limitations
+
+Build in the ROS dev container from /workspace after sourcing /opt/ros/jazzy:
+
+```bash
+colcon --log-base /tmp/neptune-p4c-log build \
+  --build-base /tmp/neptune-p4c-build --install-base /tmp/neptune-p4c-install \
+  --packages-select neptune_perception
+source /tmp/neptune-p4c-install/setup.bash
+ros2 launch neptune_perception dual_models.launch.py
+```
+
+Start the existing inference Compose service and P3 performance camera separately,
+in the same ROS domain. The dual launch starts only the two observers and fusion.
+The explicitly bounded smoke entrypoint is `./scripts/run_p4c_smoke.sh`; it shares
+the existing perception ownership lock, requires an idle inference service and
+P3/P4c installed overlays, uses a 125 s warmup deadline, one 20 s window, bounded
+process cleanup and inner 165 s / outer 175 s execution bounds. Stop the observers
+and owned inference service to return to P3. Existing single-model launches remain.
+
+Limitations: one short fixed pose establishes integration/performance, not dynamic
+reliability, calibrated detection accuracy, long-duration scheduling or real-ocean
+performance. Both models were trained/evaluated at full 640x480; equivalent accuracy
+at full 320x240 is unproven. Low-confidence fragments/overlaps remain visible;
+IoU 0.30 and 0.20/0.5 s timing limits are engineering defaults, not calibrated
+operational thresholds. Greedy association is geometric only, with no tracking
+or physical identity; ambiguous targets deliberately remain invalid. Unmatched
+fallback incurs up to 0.20 s plus a 0.05 s watchdog tick. Source stamps remain
+native publication/readback times, not verified capture instants. Status JSON is
+an existing observation contract; future P5 consumers must parse provenance and
+validity explicitly. Cold initialization and bounded request/shutdown limitations
+from P4a/P4b remain. No physical pipe angle exists.
+
+Changed files: src/neptune_perception/setup.py; new fusion.py, fusion_node.py,
+config/pipe_fusion.yaml, launch/dual_models.launch.py, test/test_fusion.py and
+test/test_fusion_node.py; scripts/perception_p4c_smoke.py and run_p4c_smoke.sh;
+docs/PROJECT_HANDOFF.md and docs/PERCEPTION_INTEGRATION.md. No unrelated package
+changed. **P5 NOT STARTED. No commit or push occurred.**
