@@ -19,6 +19,7 @@ setup(
         ]),
         ('share/neptune_sim/launch', [
             'launch/perception_camera.launch.py',
+            'launch/perception_performance.launch.py',
         ]),
     ],
     install_requires=['setuptools'],

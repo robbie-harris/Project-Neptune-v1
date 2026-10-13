@@ -3,11 +3,17 @@
 P0 audit complete. P1a added the optional pipe/flange scene; P1b adds its valve.
 P2 lateral thrusters + lights is implemented; unit/build and physics actuation
 checks pass, but full graphical actuation remains unverified because simulator
-ROS callbacks stalled. P3 camera is implemented and visually verified, but its
-stable approximately 10 Hz stream requirement has NOT passed. P4 is next only
-after the stream issue is resolved, and has not started. Stage 2 remains frozen
+ROS callbacks stalled. **P3 COMPLETE WITH PERCEPTION PROFILE**: the explicit
+320x240 software performance profile passes the minimum >=5 Hz / <0.5 s gate.
+Configured 10 Hz is not achieved wall throughput. P4 is next and has not started.
+Polished rendering is deferred to P8. Stage 2 remains frozen
 through S2.6. The environment now contains pipe, flange, and valve categories;
 model weights and the detector are still not integrated.
+
+P3c tested two native camera candidates; both failed acceptance. They remain
+**NOT ACTIVE / NOT PART OF NORMAL BUILD / FAILED ACCEPTANCE**. The approved P3
+profile uses the original native library. Historical blocked records below are
+superseded by the final P3 completion record at the end of this document.
 
 Source: donor `608a3b985b8c5dbfc56f5398b8679c8038861bbe`, `Simulation/assets/flange.obj`, copied byte-for-byte to
 `src/neptune_sim/assets/perception/flange.obj`.
@@ -534,3 +540,409 @@ narrow view-scheduling patch; do not import its unrelated clock/optics changes.
 Lower-rate perception requires explicit acceptance and a freshness policy; none
 was accepted or implemented here. P4 remains NOT STARTED. Stage 2 remains frozen
 through S2.6; S2.7–S2.14 were not started.
+
+## P3c native camera candidates — acceptance FAILED (2026-10-12)
+
+**P3 remains BLOCKED. P4 NOT STARTED.** Two distinct disposable candidates were
+built and tested; neither reached >=5 Hz with maximum receipt/stamp gaps <0.5 s.
+Live experimentation stopped after those two attempts, within the approximately
+20-minute limit. No baseline rerun, hardware candidate run, final integration
+benchmark, full mission, commit or push occurred. No failed candidate was wired
+into Dockerfile or installed into the running container.
+
+### Complete donor audit
+
+Read all three scripts completely at donor `lumyn/Perception`, SHA
+`608a3b985b8c5dbfc56f5398b8679c8038861bbe`. The following inventory extracts each
+individual source edit, including the scripts' loop/bulk replacements. Paths
+are relative to Stonefish (`SF`) or stonefish_ros2 (`ROS`). A row describing a
+bulk substitution explicitly identifies its full affected region.
+
+| Script / source file | Individual hunk / transformation | Classification |
+| --- | --- | --- |
+| patch_stonefish / SF Library/include/graphics/OpenGLPipeline.h | Add getCaptureTime getter after getScreenTexture | TIMESTAMPING |
+| same | Add neptuneCaptureTime member after lastSimTime | TIMESTAMPING |
+| patch_stonefish / SF Library/src/graphics/OpenGLPipeline.cpp | Set neptuneCaptureTime=lastSimTime before reading current simulation time | TIMESTAMPING |
+| same | Before view-render loop, set updateCount=viewsQueue.size(); viewsNoUpdate.clear() | CAMERA SCHEDULING |
+| same | Replace DrawParticles(camera) with a disabled-effect comment | OPTICS |
+| patch_stonefish / SF Library/src/core/SimulationManager.cpp | Clamp deltaTime to 100000 microseconds before StepSimulation | GENERAL SIMULATION CLOCK |
+| patch_stonefish / ROS src/stonefish_ros2/ROS2ScenarioParser.cpp | Enable-service sensors start true instead of false | SENSOR STARTUP |
+| patch_stonefish / ROS src/stonefish_ros2/ROS2SimulationManager.cpp | Add GraphicalSimulationApp, OpenGLPipeline, chrono, thread and clock-message includes | TIMESTAMPING / GENERAL SIMULATION CLOCK |
+| same | getCurrentTime uses steady_clock microseconds instead of ROS-clock now | GENERAL SIMULATION CLOCK |
+| same | SimulationSleep uses thread sleep_for instead of ROS-clock sleep_for | GENERAL SIMULATION CLOCK |
+| same | Every nh_->get_clock()->now() from SimulationStepCompleted through end of file becomes simulation-time nanoseconds | TIMESTAMPING |
+| same | Lazily create neptune_clock publisher and publish /clock in SimulationStepCompleted | GENERAL SIMULATION CLOCK |
+| same | In ColorCameraImageReady through before RespawnRobotService, replace simulation-time stamps with previous-render capture time (all vision callbacks in that region) | TIMESTAMPING |
+| patch_stonefish / ROS src/stonefish_ros2/ROS2Interface.cpp | All ROS-clock now calls become simulation-time nanoseconds | TIMESTAMPING |
+| patch_stonefish / ROS CMakeLists.txt | Add find_package(rosgraph_msgs REQUIRED) | GENERAL SIMULATION CLOCK |
+| same | Add rosgraph_msgs to interface target dependencies | GENERAL SIMULATION CLOCK |
+| patch_stonefish / ROS package.xml | Add rosgraph_msgs depend | GENERAL SIMULATION CLOCK |
+| patch_optics / SF Library/include/graphics/OpenGLAtmosphere.h | Add SetNaturalLighting public declaration | OPTICS |
+| same | Add neptuneNaturalUBO member | OPTICS |
+| patch_optics / SF Library/src/graphics/OpenGLAtmosphere.cpp | Allocate lighting-toggle UBO at binding zero after sunSkyUBOData memset | OPTICS |
+| same | Insert SetNaturalLighting implementation before SetupMaterialShaders | OPTICS |
+| same | Delete extra UBO in destructor | OPTICS |
+| patch_optics / SF Library/shaders/atmosphereApi.glsl | Add NeptuneOptics uniform block after atmosphere injection | OPTICS |
+| same | For every return line containing GetSkyRadiance or atmosphere.solar_irradiance, multiply by neptuneNaturalLight | OPTICS |
+| same | GetSunAndSkyIrradiance return becomes local sun value; scale both sun and sky | OPTICS |
+| same | Multiply SKY_SPECTRAL_RADIANCE_TO_LUMINANCE sky scaling by toggle | OPTICS |
+| same | Multiply SUN_SPECTRAL_RADIANCE_TO_LUMINANCE return by toggle | OPTICS |
+| patch_optics / SF Library/src/graphics/GLSLShader.cpp | After linking, bind NeptuneOptics if present; remove opening DEBUG guard for diagnostics | OPTICS / UNRELATED (release diagnostics) |
+| same | Remove matching endif before GL_LINK_STATUS | UNRELATED (release diagnostics) |
+| patch_optics / SF Library/include/graphics/OpenGLPipeline.h | Add mutex include | OPTICS |
+| same | Add RequestNeptuneOptics / GetNeptuneOptics with mutex guarding | OPTICS |
+| same | Add optics mutex and requested/applied vectors after capture-time member | OPTICS |
+| patch_optics / SF Library/src/graphics/OpenGLPipeline.cpp | Add Light include | OPTICS |
+| same | After atmosphere lookup, apply water type, particles, natural light and lamps using Neptune/LightLeft and LightRight | OPTICS |
+| same | Restore particle drawing conditional on ocean->hasParticles() | OPTICS |
+| patch_optics / ROS src/stonefish_ros2/ROS2SimulationManager.cpp | Add cmath, sstream, StaticEntity includes | OPTICS / UNRELATED |
+| same | Before Standard services, create optics request/applied endpoints and validate five-element requests | OPTICS |
+| same insertion | Publish retained instance object-ID map for Pipeline, InspectionValve, InspectionFlange | UNRELATED |
+| same insertion | Disable Neptune/CaptureInstances on startup | SENSOR STARTUP |
+| same insertion | Add TankOverview enable service | GUI/VIEW / SENSOR STARTUP |
+| same | Before timeStep suppression, publish applied optics vector each simulation step | OPTICS |
+| patch_views / SF Library/include/graphics/OpenGLPipeline.h | Add requested/applied view vectors and mutex-guarded Request/GetNeptuneViews before capture getter | GUI/VIEW |
+| patch_views / SF Library/src/graphics/OpenGLPipeline.cpp | Add Sensor include | GUI/VIEW |
+| same | Before optics application, look up five donor-specific sensors; select camera/downward/sonar/overview frequencies 10/5/2 Hz and overview enable state | SENSOR UPDATE RATE / GUI/VIEW |
+| patch_views / ROS src/stonefish_ros2/ROS2SimulationManager.cpp | Before Standard services, add view request/applied endpoints, validate three-element requests and forward to renderer | GUI/VIEW |
+| same | Before timeStep suppression, publish applied view vector | GUI/VIEW |
+
+**GPU/FRAMEBUFFER READBACK: no donor hunk in any of these three scripts.** None
+changes OpenGLRealCamera, glGetTexImage, glMapBuffer, or camera framebuffer layout.
+The scripts' shared replace/edit helpers and print statements are patch machinery,
+not additional native-source hunks. patch_views' existing-marker early return is
+its sole idempotency check; the other scripts are not generally idempotent.
+
+Donor rationale: `docs/Decision Log.md` and `docs/Known Issues and Fixes.md`
+attribute pending-view rendering to stereo synchronization; the latter explicitly
+reports camera/sonar delivery below configured 10 Hz. Its clock correction followed
+an accelerated/repeated-image capture incident, not a demonstrated WSL camera fix.
+`docs/Faster Mission and View Priority.md` calls its rates nominal and reports
+2.5–3.0 FPS GUI transport on Apple M5. Donor Dockerfile explicitly selects software
+OpenGL; `docs/Methods and Libraries.md` identifies Mac Docker llvmpipe. That is
+consistent with unavailable Apple GPU in Docker, not proof that WSL D3D12 readback
+is unsupported or that the donor fixed it.
+
+Both local and installed native repositories match the requested upstream SHAs:
+SF `b21eb8e194c570ff2f61e91aeffb38d73dc25f42`, ROS
+`6646e7ac25eed982f37f807abc7b545dbd2d6648`. ROS has no source modifications; SF
+has only the existing two FLS compatibility overrides. The camera pipeline and
+OpenGLRealCamera files were verified byte-identical to upstream before testing.
+Therefore all audited donor changes are absent. Existing `docker/Dockerfile`
+applies FLS whole-file overrides under `docker/stonefish_overrides/`; there was
+no generic SHA-checked patch mechanism. The rejected P3c artifacts are isolated
+under `docker/patches/p3c-experimental/`, with no normal-build hook.
+
+Only pending-view scheduling directly supports the initial camera-publication
+hypothesis. Startup changes cannot explain enabled cameras being slow; view-rate
+changes alter unrelated sensors; optics changes alter image appearance; clock
+changes lack evidence of being necessary for this camera-rate fix. None of those
+was imported. No global-clock change was justified by these experiments.
+
+### Exact candidates and paired results
+
+Candidate 1 reuses exactly the donor pending-view hunk in
+`Library/src/graphics/OpenGLPipeline.cpp`:
+
+```cpp
+    updateCount = viewsQueue.size();
+    viewsNoUpdate.clear();
+```
+
+Candidate 2 retains that hunk and changes only
+`Library/src/graphics/OpenGLRealCamera.cpp::DrawLDR` readback: bind cameraFBO,
+select GL_COLOR_ATTACHMENT1, read pixels into the existing cameraPBO, then restore
+framebuffer zero. It replaces glGetTexImage with:
+
+```cpp
+    OpenGLState::BindFramebuffer(cameraFBO);
+    glReadBuffer(GL_COLOR_ATTACHMENT1);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, cameraPBO);
+    glReadPixels(0, 0, viewportWidth, viewportHeight, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    OpenGLState::BindFramebuffer(0);
+```
+
+The exact unified patches are retained separately; candidate 2 contains both
+hunks and must be applied to a fresh checkout, not on top of candidate 1.
+Both candidates used the previous P3b fixed-pose optional perception scene with
+both cameras enabled, unchanged lights/fixtures/all other sensors, 100 Hz physics,
+320x240 preview, low graphics, llvmpipe and eight workers. Same RELIABLE depth-10
+paired subscriptions; 12 s startup then bounded 20 s window; rates=count/window.
+No FOV/resolution/XML tuning. Each process loaded only the disposable library via
+LD_LIBRARY_PATH. No Neptune ROS package rebuild was needed or performed.
+
+| Software run | Camera | Frames / window (s) | Hz | Max receipt gap (s) | Max stamp gap (s) |
+| --- | --- | --- | --- | --- | --- |
+| P3b baseline (retained) | existing | 19 / 20.01169 | 0.949445 | 1.216205 | 2.672112 |
+| P3b baseline (retained) | inspection | 19 / 20.01169 | 0.949445 | 1.194253 | 2.676802 |
+| P3c candidate 1 | existing | 32 / 20.009017 | 1.599279 | 0.687598 | 2.283006 |
+| P3c candidate 1 | inspection | 32 / 20.009017 | 1.599279 | 0.671358 | 2.283014 |
+| P3c candidate 2 | existing | 31 / 20.001220 | 1.549905 | 0.692256 | 0.701204 |
+| P3c candidate 2 | inspection | 31 / 20.001220 | 1.549905 | 0.690156 | 0.700397 |
+
+**Both candidates FAIL.** Scheduling increases delivered rate in these short
+windows, supporting a shared scheduling contribution; it is insufficient to
+restore usable publication. Framebuffer readback does not improve throughput over
+candidate 1. The smaller stamp gaps in candidate 2 are not proof of a readback fix
+because there was only one window per candidate. No exact remaining root cause
+was established. Observed CPU use (~479% during candidate 1) and enabled graphics
+work are consistent with rendering cost, but no GPU-stage timing was measured.
+Publication stamps remain wall-clock readback stamps, not physical capture times.
+
+**D3D12: no new test**, because neither software candidate passed the prerequisite.
+Retained P3b evidence is existing 0 frames/0 Hz and inspection 1 frame/0.04997 Hz
+in 20.01196 s; interframe receipt/stamp gaps are undefined with fewer than two
+frames. A D3D12-specific framebuffer/PBO defect remains unproven. No Mesa, WSL,
+NVIDIA or host graphics configuration changed. Extracted SDL2 development headers
+were used only in /tmp; no graphics packages were installed or changed.
+
+### Build, invariants, reproduction and rollback
+
+Disposable native builds compiled one changed translation unit and relinked
+against existing pinned Stonefish objects (including unchanged FLS overrides).
+Candidate 1 succeeded in **3.216950 s**; candidate 2 in **1.535475 s**. Initial
+candidate-1 compile failed on missing SDL2 development headers, then on its
+architecture-specific include path; both failures were corrected using extracted
+`libsdl2-dev` headers and both native candidate builds passed. The installed
+library was not rebuilt/replaced: it still matches /opt/stonefish/build/libStonefish.so,
+SHA-256 `5a566fdf108cb5246105aab5faeb29e2beeebe1bac653d77a841788beaa677f4`.
+
+Both live candidates preserved camera dimensions, native frame IDs, and intrinsics:
+existing 1360x1024, fx=fy=1306.267846340393, cx=680, cy=512;
+inspection 640x480, fx=fy=100.8956124412747, cx=320, cy=240. Stamps increased
+monotonically; RELIABLE/VOLATILE QoS remained. A fresh separate bounded live TF
+check passed both unchanged static edges and optical quaternion (0.5,0.5,0.5,0.5).
+No sensor configuration or package under src/ changed; no thruster, adapter,
+mission, autonomy, controls, estimator, perception, Roboflow or GUI change.
+Fixture visibility remains the retained P3 image evidence with unchanged optics;
+no new candidate image was retained, so fresh candidate visibility is unverified.
+This limitation does not change the already failed throughput gate.
+
+Reproduce source patches explicitly in a **disposable** checkout:
+
+```bash
+git clone --no-hardlinks external/stonefish /tmp/neptune-p3c-source-1
+python3 docker/patches/p3c-experimental/apply.py /tmp/neptune-p3c-source-1 1
+# For candidate 2, use another fresh checkout and select 2 instead.
+```
+
+The helper checks the exact upstream SHA and SHA-256 of both affected source
+files, checks patch applicability before mutation, verifies resulting hashes,
+recognizes an exactly applied candidate, and rejects drift/mixed candidate state.
+Existing unrelated FLS overrides are permitted. Neither artifact is an accepted
+fix. For a complete separate native build, retain the current FLS overrides and
+use the Dockerfile's Release CMake build in the disposable source; run the current
+paired P3b probe with its simulator process LD_LIBRARY_PATH selecting that build's
+libStonefish.so. The measured fast builds reused existing object files and changed
+only the candidate translation unit; they did not rebuild unrelated packages.
+
+Rollback: stop the owned experiment process and remove its process-local
+LD_LIBRARY_PATH override. Normal launch already uses the original library; no
+Dockerfile/source/installed-library rollback is required. Discard the disposable
+checkout to undo experimental source changes. Do not apply these artifacts to
+normal dependencies or promote them without a new authorized investigation.
+
+Evidence: container /tmp/neptune-p3c/{source,candidate1.patch,candidate2.patch,
+libStonefish.so}, /tmp/neptune-p3c-candidate{1,2}-{software.log,result.json}.
+Both probe processes completed bounded cleanup; no simulator remained. Startup
+retained the known SDL2 unsupported-operation warning without missing-resource
+failure. Source-helper apply/idempotence/drift checks and git diff --check passed.
+No final integration benchmark was run because no candidate met acceptance.
+Stage 2 remains frozen through S2.6; P4 and S2.7–S2.14 were not started.
+
+## P3c follow-up sensor-budget audit (2026-10-12)
+
+**A blanket platform-limited conclusion is not supported.** Unpatched Stonefish
+sustained >=5 Hz with <0.5 s receipt and stamp gaps in a temporary 320x240
+inspection-camera-only configuration. The normal 640x480 configuration has not
+passed; P3 is not promoted to complete by this diagnostic. P4 remains not started.
+
+Exact repository camera XML in scenarios/neptune_girona_perception.scn:
+`<sensor name="proscilica" type="camera" rate="10.0">` and
+`<sensor name="inspection_camera_optical_frame" type="camera" rate="10.0">`.
+Existing camera specs: 1360x1024/55 degrees; inspection: 640x480/145 degrees.
+Native ScenarioParser reads rate directly into ColorCamera; Sensor constructor
+stores it through setUpdateFrequency with no clamping or lower-rate substitution.
+The ROS parser creates queue size ceil(getUpdateFrequency()) and changes only
+enable state. There is no runtime rate-getter service: this frequency confirmation
+is from the exact loaded pinned parser/constructor source and XML, not achieved FPS.
+Normal startup has existing camera disabled by /sim/proscilica/set_enabled and
+inspection enabled without an enable service. Both retain nominal 10 Hz frequency.
+
+Complete graphical sensor/view inventory:
+
+| Native sensor or view | Configured rate / size | Normal scene startup | Prior paired diagnostic |
+| --- | --- | --- | --- |
+| GIRONA500/proscilica, OpenGLRealCamera | 10 Hz; 1360x1024 | Sensor disabled by enable-service declaration | Enabled |
+| GIRONA500/inspection_camera_optical_frame, OpenGLRealCamera | 10 Hz; 640x480 | Enabled | Enabled |
+| GIRONA500/fls, OpenGLFLS | 2 Hz; 512 beams x 256 bins | Sensor disabled by enable-service declaration | Enabled |
+| Main OpenGLTrackball view | Continuous; simulator window size | Enabled | Enabled |
+
+There are no other camera/depth/segmentation/sonar sensors or custom views in
+this scenario. Disabled sensor views remain registered and may receive initial
+updates; they do not receive steady sensor-update requests. The main trackball
+shares the render pipeline and continuously renders independently of camera rate.
+Scene geometry, ocean/particles, atmosphere and three vehicle lamps add rendering
+work but are not additional sensors/views. Cameras have on-screen display false
+by default; FLS additionally generates its display image in its own sensor path.
+
+Exactly two new SOFTWARE tests, original installed Stonefish library, llvmpipe
+with eight workers, low render quality, **160x120 main window**. Temporary copies
+of the prior fixed inspection-pose scene removed existing camera and FLS entirely
+(to avoid even startup/cached-view work), retained inspection at rate 10.0, and
+retained/enabled DVL, IMU, pressure, odometry (also accelerometer/GPS). Vehicle pose
+and fixtures/lights/world were unchanged. 12 seconds startup, then each bounded
+20-second measurement; reliable depth-10 subscriptions; count/full-window rate.
+The second test changed only temporary inspection resolution after the first
+measured <5 Hz. No repository XML, native source, native library or Docker change.
+
+| Inspection-only resolution | Frames / window | Hz | Max receipt gap | Max stamp gap |
+| --- | --- | --- | --- | --- |
+| 640x480 | 75 / 20.005811 s | 3.748911 | 0.357176 s | 2.072022 s |
+| 320x240 | 108 / 20.002621 s | 5.399292 | 0.214072 s | 0.214050 s |
+
+640x480 scalar counts: DVL 435, IMU 435, pressure 109, odometry 653.
+320x240 scalar counts: DVL 400, IMU 400, pressure 100, odometry 600, consistent
+with configured 20/20/5/30 Hz. No existing-camera or FLS image stream was present.
+CameraInfo confirmed selected dimensions, unchanged frame and FOV; at 320x240
+fx=fy=50.44780622063735, cx=160, cy=120. /proc process maps verified
+/usr/local/lib/libStonefish.so in both tests, with no candidate-library override.
+
+Conclusion: sensor/view rendering budget materially affects publication in this
+software runtime. Removing auxiliary vision work and reducing the main window
+improved 640x480 inspection throughput from prior paired ~0.949 Hz to ~3.749 Hz;
+reducing inspection pixels then reached ~5.399 Hz. These first changes were bundled,
+so their individual contributions are not isolated. A WSL-specific hard <5 Hz
+camera ceiling is disproven for this reduced software configuration. WSL graphics
+may still contribute to total rendering cost; neither these tests nor the prior
+candidates establish the exact expensive stage. D3D12 was not tested here and its
+failure remains unresolved. The 640x480 stamp outlier remains unexplained; ROS
+publication stamps are not physical capture timestamps. Single short windows do
+not establish long-term reliability or validate 320x240 detector suitability.
+
+Evidence: container /tmp/neptune-camera-budget/{scene.scn,robot.scn,640x480.log,
+320x240.log,result.json}; host /tmp/neptune-camera-budget.py. Both simulators were
+stopped with bounded cleanup; native source changes remain only the existing FLS
+compatibility overrides. Rollback is simply using the unchanged repository scene;
+all sensor-budget changes exist only in /tmp. No package rebuild was required.
+No full mission, P4, native patch, commit or push occurred. Stage 2 stays frozen
+through S2.6. Documentation and git diff --check validation only after the probes.
+
+## P3 finalization — COMPLETE WITH PERCEPTION PROFILE
+
+**P3 COMPLETE WITH PERCEPTION PROFILE. P4 is next, NOT STARTED.** This status
+supersedes the historical blocked/native-investigation records above. The shared
+Stonefish/WSL rendering budget was the limiting factor; reducing vision work and
+image resolution passed the approved minimum gate without a native patch.
+Polished visualization remains P8 work.
+
+Official launch: `ros2 launch neptune_sim perception_performance.launch.py` with
+required `simulation_data` pointing to the existing Stonefish resource directory.
+The launch reuses perception_camera.launch.py for simulator/TF ownership and
+forces software llvmpipe, eight workers (`GALLIUM_DRIVER=llvmpipe`,
+`LIBGL_ALWAYS_SOFTWARE=1`, `LP_NUM_THREADS=8`), low graphics quality, 100 Hz physics,
+and a 160x120 main window. No native modifications or experimental patch hooks.
+
+The installed `neptune_sim.perception_profile` helper derives temporary scene and
+vehicle XML from the installed optional perception resources at launch. It sets
+inspection resolution to 320x240, preserves rate 10.0, FOV 145 degrees, pose,
+clip planes, topics and frame names, and excludes other vision sensors entirely
+(existing auxiliary camera and FLS), avoiding their startup/cached-view workload.
+DVL, IMU, pressure and odometry remain present and start enabled; existing
+accelerometer/GPS also remain enabled, matching the measured reduced runtime.
+Their sensor enable-service declarations are omitted only in this generated
+profile. No sensor rate/noise/physics change or motor/mission architecture change.
+Ground truth /sim/odometry remains evaluation-only. The launch starts simulator
+and camera static TFs only, not estimator, adapter, mission or detector nodes.
+
+The helper preserves original HOME spawn/dynamic-body behavior, geometry, lamps,
+and actuators. It writes into a unique temporary directory cleaned on launch
+shutdown. Source/installed scene files are never overwritten or duplicated in
+the repository. A forced process/host exit can leave temporary files in /tmp.
+
+Ordinary visual use remains `perception_camera.launch.py`: unchanged 640x480
+inspection camera, 800x600 default window, existing camera/FLS definitions and
+historical enable-service defaults, native graphics default and optional explicit
+software_rendering flag. Baseline vehicle/scenarios are untouched. This is a
+visual/demo entrypoint, with no passing camera-throughput claim. Performance
+settings are explicit in their separate launch, never silently applied to demos.
+
+Camera contract (performance profile):
+
+- `/neptune/camera/inspection/image_color`, native rgb8, 320x240.
+- `/neptune/camera/inspection/camera_info`, native CameraInfo for 320x240.
+- Both frame IDs: `GIRONA500/inspection_camera_optical_frame`.
+- HFOV 145 degrees; configured rate 10 Hz; existing near/far 0.05/20 m.
+- Existing camera mount/optical TF unchanged: translation (0.82,0,0.20), optical
+  quaternion (0.5,0.5,0.5,0.5).
+
+CameraInfo is generated by the unchanged native bridge from actual camera
+settings; no intrinsics are manually assigned. Retained 320x240 measurement:
+fx=fy=50.44780622063735, cx=160, cy=120; K/P scale with runtime resolution.
+
+Retained approved software evidence (no additional throughput run):
+
+| Inspection-only resolution | Frames / approximately 20 s | Hz | Max receipt gap | Max stamp gap | Result |
+| --- | --- | --- | --- | --- | --- |
+| 640x480 | 75 | 3.749 | 0.357 s | 2.072 s | FAIL |
+| 320x240 | 108 | **5.399** | **0.214 s** | **0.214 s** | PASS minimum |
+
+The accepted evidence used a temporary fixed inspection pose with all required
+scalar streams active. It establishes the reduced settings' bounded performance,
+not long-term reliability or a full mission at the repository's dynamic spawn.
+Configured 10 Hz is retained; the >=8 Hz preferred goal is not met. Native stamps
+remain publication/readback wall time, not validated capture timestamps. Detector
+quality at 320x240 is future P4 work. D3D12 remains **unsupported/unusable for this
+camera path** on the tested WSL runtime; hardware usability is not claimed.
+
+Build verified in this session (one package, no simulator/native rebuild):
+
+```bash
+docker compose -f docker/compose.yaml exec -T dev bash -lc '
+  source /opt/ros/jazzy/setup.bash
+  source /opt/stonefish_ws/install/setup.bash
+  cd /workspace
+  colcon --log-base /tmp/neptune-p3-final-log build \
+    --build-base /tmp/neptune-p3-final-build \
+    --install-base /tmp/neptune-p3-final-install --packages-select neptune_sim
+'
+```
+
+Run the official performance profile from that verified installation:
+
+```bash
+docker compose -f docker/compose.yaml exec dev bash -lc '
+  source /opt/ros/jazzy/setup.bash
+  source /opt/stonefish_ws/install/setup.bash
+  source /tmp/neptune-p3-final-install/setup.bash
+  ros2 launch neptune_sim perception_performance.launch.py \
+    simulation_data:=/workspace/external/stonefish/Tests/Data
+'
+```
+
+For ordinary visual/demo use, replace only the launch filename with
+`perception_camera.launch.py`; its normal window/resolution defaults remain.
+With a normal workspace colcon installation, source that workspace's
+`install/setup.bash` instead of the temporary verified install above. No prior
+/tmp scene or benchmark-generated file is required by either official launch.
+Rollback/select ordinary rendering by using the original launch; there is no
+native patch or Docker change to undo.
+
+Experimental evidence retained under `docker/patches/p3c-experimental/` is
+**NOT ACTIVE / NOT PART OF NORMAL BUILD / FAILED ACCEPTANCE**. Its README states
+this explicitly. The patch helper is manual-only, with no normal build/launch
+reference. Both rejected native candidates remain excluded from official P3.
+
+Final quick validation: Python syntax, generated XML/config and preservation
+checks, neptune_sim package build, installed helper/resources and launch wiring,
+launch argument parsing, temporary-resource cleanup, and git diff --check passed.
+No simulator smoke, throughput experiment, native debugging or full mission was
+run during finalization. No upstream Stonefish, GUI, perception runtime, controls,
+autonomy, estimator or adapter changes. P4 NOT STARTED; no commit or push.
+
+Finalization build: neptune_sim completed successfully (1 package, 0.93 s).
+The first installed-resource checker invocation failed because it treated raw
+launch argument strings as substitution objects; correcting only the checker
+resolved it. Final installed verification and `--show-args` passed, without
+starting any simulator. No package or acceptance criterion was weakened.

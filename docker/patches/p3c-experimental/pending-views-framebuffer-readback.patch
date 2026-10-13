@@ -1,0 +1,31 @@
+diff --git a/Library/src/graphics/OpenGLPipeline.cpp b/Library/src/graphics/OpenGLPipeline.cpp
+index fd2a706..0450400 100644
+--- a/Library/src/graphics/OpenGLPipeline.cpp
++++ b/Library/src/graphics/OpenGLPipeline.cpp
+@@ -439,6 +439,8 @@ void OpenGLPipeline::Render(SimulationManager* sim)
+             viewsNoUpdate.erase(std::find(viewsNoUpdate.begin(), viewsNoUpdate.end(), viewsQueue[updateCount-1]));
+     }
+ 
++    updateCount = viewsQueue.size();
++    viewsNoUpdate.clear();
+     //Loop through all views -> trackballs, cameras, depth cameras...
+     for(unsigned int i=0; i<updateCount; ++i)
+     {  
+diff --git a/Library/src/graphics/OpenGLRealCamera.cpp b/Library/src/graphics/OpenGLRealCamera.cpp
+index 5acacfc..04c3272 100644
+--- a/Library/src/graphics/OpenGLRealCamera.cpp
++++ b/Library/src/graphics/OpenGLRealCamera.cpp
+@@ -183,9 +183,12 @@ void OpenGLRealCamera::DrawLDR(GLuint destinationFBO, bool updated)
+         OpenGLState::BindFramebuffer(0);
+ 
+         OpenGLState::BindTexture(TEX_POSTPROCESS1, GL_TEXTURE_2D, cameraColorTex[1]);
++        OpenGLState::BindFramebuffer(cameraFBO);
++        glReadBuffer(GL_COLOR_ATTACHMENT1);
+         glBindBuffer(GL_PIXEL_PACK_BUFFER, cameraPBO);
+-        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
++        glReadPixels(0, 0, viewportWidth, viewportHeight, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
++        OpenGLState::BindFramebuffer(0);
+         OpenGLState::UnbindTexture(TEX_POSTPROCESS1);
+         newData = true;
+     }
