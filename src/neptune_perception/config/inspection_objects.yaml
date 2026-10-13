@@ -1,0 +1,5 @@
+inspection_objects:
+  ros__parameters:
+    inference_url: http://127.0.0.1:9001
+    freshness_s: 0.5
+    request_timeout_s: 120.0

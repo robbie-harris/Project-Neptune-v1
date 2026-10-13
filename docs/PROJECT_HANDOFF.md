@@ -24,9 +24,10 @@ without rewriting the autonomy stack.
 
 # 2. Current development stage
 
-Current perception status: **P3 COMPLETE WITH PERCEPTION PROFILE**. The explicit
+Current perception status: **P4a COMPLETE — observation-only Inspection Objects**.
+The live GPU smoke passed; Orientation A/P4b and P5 remain NOT STARTED. The explicit
 320x240 software profile is the accepted P3 runtime; ordinary 640x480 visual use
-has not passed throughput acceptance. P4 is next, NOT STARTED. Polished rendering
+has not passed throughput acceptance. P4b is next, only when assigned. Polished rendering
 is deferred to P8. See section 26 for commands, retained evidence and validation.
 Stage 2 remains complete/frozen through S2.6.
 
@@ -1794,3 +1795,140 @@ The first installed-resource checker invocation failed because it treated raw
 launch argument strings as substitution objects; correcting only the checker
 resolved it. Final installed verification and `--show-args` passed, without
 starting any simulator. No package or acceptance criterion was weakened.
+
+
+# 27. P4a Inspection Objects — observation-only pipeline COMPLETE
+
+**P4a implemented and bounded GPU smoke PASSED. P4b next: Orientation A1/t1,
+NOT STARTED. P5 NOT STARTED.** Historical P4-not-started statements above are
+superseded by this record. Stage 2 remains complete/frozen through S2.6.
+
+Read AGENTS.md and both project documents completely. Inspected donor
+`lumyn/Perception` (a local remote branch, not an owner/repository URL), SHA
+`608a3b985b8c5dbfc56f5398b8679c8038861bbe`: backends.py, detector.py and
+config/detector.yaml. Adapted finite-value/class/bbox checks, PNG/full-frame
+transport, annotation colors, copied source headers, standard Detection2DArray
+construction, and a steady-clock status watchdog. No wholesale donor package,
+Orientation A configuration, donor control or mission code was imported.
+
+Model: **projects-zwfft/neptune-inspection-objects-2-yolo11n-t1**, YOLO11n,
+Inspection Objects dataset version 2, expected class schema exactly
+`pipe / valve / flange`. Fixed confidence **0.05**, NMS IoU **0.7**, max detections
+**300**. Full received frame is losslessly PNG-encoded and passed to Roboflow's
+managed preprocessing; no local resize/crop, orientation estimate or threshold tuning.
+
+Separate inference image (tag family: roboflow/roboflow-inference-server-gpu:1.7.4):
+
+    roboflow/roboflow-inference-server-gpu@sha256:9f91f44c23c067c03182c5b1de4213e5bdd97e393cd412c9bb4bdabdf5bdca29
+
+Registry platform manifest and downloaded image inspection both confirmed
+**linux/amd64**. Optional docker/compose.perception.yaml publishes only
+**127.0.0.1:9001**. The pinned Roboflow container runs a constrained Python
+adapter using `inference.get_model`, legacy YOLO11 ONNX execution and managed
+preprocessing, rather than exposing the complete generic server API.
+It rejects unexpected loaded classes and requires an actual CUDA profile.
+Credential: existing host `~/.config/neptune/roboflow_api_key` is bind-mounted
+**read-only** at `/run/secrets/roboflow_api_key`, with automatic missing-file
+creation disabled. Only the inference process reads it into memory. The ROS
+node does not receive a key, read a key file or transmit authentication. No key
+value in environment variables, argv, YAML, Dockerfiles, source or documents.
+Third-party stdout/stderr (including native output) is discarded before imports
+and secret access; Docker inference logging is disabled. Errors expose only fixed
+states. Model/profile caches are ephemeral in container /tmp; no repository cache.
+No Linux NVIDIA display driver was installed.
+
+Input: `/neptune/camera/inspection/image_color` (sensor_msgs/Image). Outputs:
+`/neptune/perception/object_detections` (vision_msgs/Detection2DArray),
+`/neptune/perception/annotated` (sensor_msgs/Image, bgr8),
+`/neptune/perception/status` (std_msgs/String containing documented JSON).
+Array, each detection and annotated image retain source sec/nanosec/frame_id.
+Status retains source header, dimensions, model, class/confidence, clipped
+xyxy/center, horizontal/vertical normalized errors, latency, age, last valid
+observation stamp, result-receipt age and monotonic request start/end.
+Right/down errors are positive. Orientation is explicitly false/null.
+
+Freshness: initial engineering threshold **0.5 s**, configurable; steady-clock
+20 Hz watchdog. READY and NO_DETECTION expire to STALE; camera silence becomes
+CAMERA_STALE; runtime loss becomes MODEL_UNAVAILABLE; invalid schema becomes
+SCHEMA_ERROR. `observation_valid` is false outside READY/NO_DETECTION. No READY
+latch survives loss. Diagnostic stale results may publish with original stamps
+and invalid status; consumers must honor source age/status. Source timestamps
+use the node's ROS clock; silence/receipt age use monotonic time. One
+BEST_EFFORT/VOLATILE depth-one subscription (compatible with native RELIABLE),
+one replaceable pending slot, one worker/request; pending old frames are replaced,
+and already-stale pending inputs are discarded. No per-frame request backlog.
+
+## Validation and measured evidence
+
+- Final focused ROS-sourced tests: **62 passed in 1.31 s**. Covers parsing,
+  loaded class schema, malformed responses/JSON, clipping/centers/normalized
+  errors, empty results, stale result, model loss, camera silence, replacement,
+  real ROS header/annotation preservation, missing/invalid secret, no secret
+  in native/exception logs, full-frame/fixed-setting adapter wiring and CUDA
+  evidence rejection. The first host run had 47 passes/3 socket-denial failures;
+  running the same tests in Docker resolved the sandbox restriction. The first
+  ROS run found a Node.context naming collision (51 passed/1 failed); corrected.
+  No tests or criteria were weakened.
+- Final neptune_perception colcon build: **1 package finished, 0.82 s**,
+  isolated /tmp/neptune-p4a-{build,install,log}. Installed launch --show-args,
+  Python compilation, runner bash syntax, Compose configuration and diff checks passed.
+- **ONE** bounded live GPU/camera/ROS smoke, isolated ROS domain 83, temporary
+  fixed inspection pose (-18.5,0,3), yaw pi. Accepted P3 helper generates full
+  **320x240 / 145-degree HFOV**, software llvmpipe/eight workers/160x120 preview/
+  low-quality camera profile. No mission, adapter, estimator or controller.
+- Inference-container nvidia-smi: RTX 4080 Laptop GPU, Windows driver **551.95**,
+  advertised CUDA **12.4**. Loaded-model session includes CUDAExecutionProvider;
+  actual inference profile recorded **238 node events, all CUDAExecutionProvider**.
+- 20.002130522 s measurement: camera **123 frames / 6.149344934 FPS**;
+  processed **124 frames / 6.199339609 FPS**. An in-flight result crossing the
+  window boundary explains the one-frame count difference.
+- Warm request latency (PNG encoding + local HTTP/GPU/response validation):
+  **mean 42.872 ms, median 44.660 ms, p95 76.048 ms, max 93.799 ms**, n=124.
+  Cold first request/model import/download/load/profile: **17.631712 s**, stale.
+- Output-observation age mean **0.106406 s**, max **2.234397 s**; source-time
+  outliers were explicitly STALE. Native stamps remain readback/publication wall
+  time, not proven capture timestamps. Live states included READY, STALE,
+  initial MODEL_UNAVAILABLE and CAMERA_STALE.
+- Observed labels: **pipe, valve, flange**. Whole-smoke box counts: pipe 242,
+  valve 127, flange 126 (not unique objects or accuracy metrics). **126 paired
+  detection/annotated source headers** verified. Pending max **1**, requests
+  in flight max **1**; **102 pending replacements**, primarily during model load.
+- Camera stop produced **CAMERA_STALE / observation_valid=false**. Zero
+  /neptune/cmd_body and /sim/thruster_setpoints publishers in the test domain.
+  All owned simulator/observer processes and inference service stopped.
+- Read-only offline audit through the mounted secret: **credential value absent
+  from 219 repository files**. Actual observer log was empty; inference logs
+  were disabled/discarded. A source-audit exec after normal cleanup reported
+  service not running; the offline audit then passed.
+
+Evidence: container `/tmp/neptune-p4a-smoke-5x78iait/{result.json,simulator.log,
+detector.log,*.scn}`; credential-free result also retained on host
+`/tmp/neptune-p4a-live-result.json`. Numeric results above survive /tmp expiry.
+Inference-container stop needed Docker's forced termination (exit 137); no
+owned process remained. After the smoke, automatic ONNX CPU execution fallback
+was explicitly disabled (pinned API availability verified), and an explicit
+container-PID-1 SIGTERM handler was added. Focused adapter/subprocess-shutdown
+tests and the final package build passed. No second live smoke ran.
+
+## Limitations / scope
+
+Original model validation used full **640x480 simulator frames**; current input
+is **320x240**. Equivalent detection accuracy is **not established**. This single
+fixed-pose short run proves model access/GPU/schema/ROS integration, not detector
+accuracy, dynamic-scene reliability, ocean performance or all failure recovery
+paths. Duplicate/overlapping pipe detections occurred with the required settings.
+Cold initialization exceeds freshness, and source-stamp outliers remain.
+Request timeout is bounded at 120 s; watchdog continues while inference blocks,
+but clean observer shutdown can wait for that in-flight timeout. Server dependency
+logs are intentionally unavailable; credential-free health states aid diagnosis.
+Dev Dockerfile declares vision_msgs/cv_bridge/OpenCV; vision_msgs was installed
+in the current dev container without a full dev-image rebuild.
+
+Changed files: new src/neptune_perception package (runtime/core/adapter, packaging,
+config/launch and four test files), docker/compose.perception.yaml, Dockerfile
+dependency additions, scripts/perception_p4a_smoke.py, scripts/run_p4a_smoke.sh,
+docs/PROJECT_HANDOFF.md and docs/PERCEPTION_INTEGRATION.md. No controls, autonomy,
+localization, simulator source/configuration or command interface changed.
+/state/odometry stays canonical; perception has no truth input.
+No secret entered repository or logs. **Orientation A/P4b, pipe angles, visual
+control and P5 were not started. No commit or push occurred.**

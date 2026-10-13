@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-colcon-common-extensions \
     python3-rosdep \
     python3-vcstool \
+    ros-jazzy-vision-msgs \
+    ros-jazzy-cv-bridge \
+    python3-opencv \
     mesa-utils \
     libgl1-mesa-dri \
     libgl1-mesa-dev \

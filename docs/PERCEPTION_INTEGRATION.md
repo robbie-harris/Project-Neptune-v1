@@ -1,14 +1,16 @@
-# Perception integration — P1 / P2 / P3
+# Perception integration — P1 / P2 / P3 / P4a
 
 P0 audit complete. P1a added the optional pipe/flange scene; P1b adds its valve.
 P2 lateral thrusters + lights is implemented; unit/build and physics actuation
 checks pass, but full graphical actuation remains unverified because simulator
 ROS callbacks stalled. **P3 COMPLETE WITH PERCEPTION PROFILE**: the explicit
 320x240 software performance profile passes the minimum >=5 Hz / <0.5 s gate.
-Configured 10 Hz is not achieved wall throughput. P4 is next and has not started.
+Configured 10 Hz is not achieved wall throughput. **P4a COMPLETE: observation-only
+Inspection Objects pipeline; bounded GPU smoke passed. P4b next: Orientation A1,
+not started. P5 not started.**
 Polished rendering is deferred to P8. Stage 2 remains frozen
 through S2.6. The environment now contains pipe, flange, and valve categories;
-model weights and the detector are still not integrated.
+Inspection Objects is integrated; orientation estimation remains unavailable.
 
 P3c tested two native camera candidates; both failed acceptance. They remain
 **NOT ACTIVE / NOT PART OF NORMAL BUILD / FAILED ACCEPTANCE**. The approved P3
@@ -946,3 +948,221 @@ The first installed-resource checker invocation failed because it treated raw
 launch argument strings as substitution objects; correcting only the checker
 resolved it. Final installed verification and `--show-args` passed, without
 starting any simulator. No package or acceptance criterion was weakened.
+
+
+## P4a Inspection Objects — COMPLETE (2026-10-12)
+
+This record supersedes historical P4-not-started statements. P4a is observation
+only. **P4b next: Orientation A1/t1, not started; P5 not started.** Stage 2 stays
+frozen through S2.6. No autonomy, control, localization or simulator changes;
+no mission, actuator commands, commit or push.
+
+### Model, runtime and secret
+
+- Workspace: `projects-zwfft`; project: `neptune-inspection-objects`; dataset
+  version **2**; YOLO11n. Exact loaded model:
+  **projects-zwfft/neptune-inspection-objects-2-yolo11n-t1**.
+- Fixed confidence **0.05**, NMS IoU **0.7**, maximum detections **300**.
+  Loaded model schema must contain exactly pipe/valve/flange, with consistent
+  prediction class IDs/names. Malformed/unexpected results are rejected.
+- Verified tag family: `roboflow/roboflow-inference-server-gpu:1.7.4`.
+  Verified **linux/amd64** platform manifest and downloaded image; exact pin:
+
+```text
+roboflow/roboflow-inference-server-gpu@sha256:9f91f44c23c067c03182c5b1de4213e5bdd97e393cd412c9bb4bdabdf5bdca29
+```
+
+`docker/compose.perception.yaml` starts a separate GPU container with only
+`127.0.0.1:9001` published. This pinned Roboflow runtime runs the constrained
+`neptune_perception.inference_server` adapter, using `inference.get_model` and
+the legacy YOLO11 ONNX implementation. It exposes just `/health` and `/infer`.
+The ROS client sends full-frame lossless PNG bytes, without credentials. The
+adapter applies the model's configured preprocessing; no local crop/resize or
+invented orientation. Direct model inference does not invoke cloud image
+inference or the generic server's active-learning/monitoring API routes.
+
+Authentication uses the existing host file `~/.config/neptune/roboflow_api_key`,
+read-only bind-mounted at **/run/secrets/roboflow_api_key**. Missing host files
+are not created. Only the inference process reads the secret; no credential in
+argv, environment, repository, YAML, Dockerfile, report or documentation.
+Third-party/native stdout and stderr are discarded before imports/secret access;
+Docker inference logging is disabled. Fixed HTTP error states contain no remote
+body/exception. Model caches and one-shot ONNX profile are ephemeral under /tmp.
+No donor ARM64 CPU image or Linux NVIDIA display driver installation.
+
+An actual model inference is profiled: CUDAExecutionProvider must be present in
+the loaded session **and** execute model nodes. A merely advertised provider is
+insufficient. The adapter reports only safe provider/count/GPU-name evidence.
+Automatic ONNX CPU run fallback is disabled; runtime errors remain unavailable.
+
+### Observation and freshness contract
+
+| Topic | Message | Contract |
+| --- | --- | --- |
+| /neptune/camera/inspection/image_color | sensor_msgs/Image | Full received 320x240 frame, native rgb8; input only |
+| /neptune/perception/object_detections | vision_msgs/Detection2DArray | Class name in hypothesis.class_id, confidence in score, clipped axis-aligned bbox center/extents |
+| /neptune/perception/annotated | sensor_msgs/Image | bgr8 annotation of that exact source frame, including empty prediction results |
+| /neptune/perception/status | std_msgs/String | JSON state, source/observation/timing/GPU/freshness/counter metadata |
+
+Array header, each Detection2D header and annotated header preserve the source
+stamp (sec/nanosec) and camera frame_id
+`GIRONA500/inspection_camera_optical_frame`. Status has:
+
+- `model_id`, `source_header`, `image_width`, `image_height`, `runtime`.
+- `observations`: class_name, confidence, clipped xyxy, center,
+  horizontal_error `(u-width/2)/(width/2)`, vertical_error
+  `(v-height/2)/(height/2)`. Right/down are positive, bounded by clipping.
+- `orientation_valid=false`, `orientation_rad=null` per object; top-level
+  orientation_valid=false. Axis-aligned bbox rotation is not an angle estimator.
+- `source_stamp_s`, `inference_start_monotonic_s`,
+  `inference_end_monotonic_s`, `processing_latency_s`, `observation_age_s`,
+  `result_receipt_age_s`, `last_valid_observation_stamp_s`, `camera_silence_s`.
+- `in_flight_source_stamp_s`, `in_flight_start_monotonic_s` separately describe
+  a newer request; they never relabel the previous result's source stamp/header.
+- `received_frames`, `replaced_frames`, `pending_frames`, `in_flight`,
+  `processed_frames`, `discarded_stale_frames`, `processed_fps`. Status FPS is
+  cumulative since node startup; the smoke separately measures a warm 20 s window.
+- `state`, `model_state` (last result/error), `observation_valid`,
+  `freshness_threshold_s`. Nullable timings mean no corresponding event yet.
+
+| State | Meaning |
+| --- | --- |
+| READY | Fresh valid response with detections |
+| NO_DETECTION | Fresh valid response with empty predictions |
+| STALE | Source age, request latency or time since last successful receipt exceeded threshold; negative source age also invalid |
+| MODEL_UNAVAILABLE | No successful runtime response, transport/model/GPU failure or timeout |
+| CAMERA_STALE | Camera has been silent past the threshold, including startup with no frames |
+| SCHEMA_ERROR | Loaded classes, response dimensions/structure/numbers/class IDs violate the contract |
+
+Initial engineering freshness threshold **0.5 s**, configurable in
+`config/inspection_objects.yaml`; it is not a calibrated operational safety limit.
+`observation_valid` is true only in READY/NO_DETECTION. Camera silence has display
+priority over the model state, which remains available separately. A **steady-clock
+20 Hz watchdog** publishes state during blocked requests and ROS-clock stalls.
+Source age uses ROS time; silence/receipt age use monotonic wall time. Native
+camera stamps remain wall-clock readback/publication time, not proven capture time.
+Stale diagnostic arrays/images retain their source stamps and may be published;
+consumers must check status and age. READY never latches indefinitely.
+
+BEST_EFFORT/VOLATILE, KEEP_LAST depth-one camera input is compatible with the
+native RELIABLE/VOLATILE camera. Exactly one replaceable pending-frame slot and
+one inference worker/request. New frames replace pending old frames while busy.
+Already-stale pending frames are discarded before dispatch. No request per frame
+is enqueued. HTTP request timeout is 120 s maximum; the watchdog remains active,
+but graceful shutdown may wait for that request timeout.
+
+### Running P4a
+
+The dev Dockerfile now declares vision_msgs, cv_bridge and OpenCV. The current dev
+container already had cv_bridge/OpenCV; vision_msgs was installed for validation.
+No complete dev Docker image rebuild was performed. Existing ROS/Stonefish and P3
+resources are required. Recreate the validated perception package installation:
+
+```bash
+docker compose -f docker/compose.yaml exec -T dev bash -lc '
+  source /opt/ros/jazzy/setup.bash
+  cd /workspace
+  colcon --log-base /tmp/neptune-p4a-log build \
+    --build-base /tmp/neptune-p4a-build \
+    --install-base /tmp/neptune-p4a-install --packages-select neptune_perception
+'
+docker compose -f docker/compose.perception.yaml up -d inspection_inference
+```
+
+Start the camera performance launch as documented in P3, then in another terminal:
+
+```bash
+docker compose -f docker/compose.yaml exec -T dev bash -lc '
+  source /opt/ros/jazzy/setup.bash
+  source /tmp/neptune-p4a-install/setup.bash
+  ros2 launch neptune_perception inspection_objects.launch.py
+'
+```
+
+The observer launch starts no simulator, mission, controller, state estimator or
+adapter. Stop inference with
+`docker compose -f docker/compose.perception.yaml stop inspection_inference`.
+Stopping the observer/inference restores the P3-only configuration; baseline
+launches never include perception automatically.
+
+Focused tests (ROS sourced):
+
+```bash
+export PYTHONPATH=/workspace/src/neptune_perception:$PYTHONPATH
+ROS_DOMAIN_ID=81 python3 -m pytest -q /workspace/src/neptune_perception/test
+```
+
+For an explicitly authorized bounded diagnostic after tests/build, the repository
+runner is `./scripts/run_p4a_smoke.sh`. It requires the P3/P4a temporary installed
+overlays above, refuses an already-running inference service, owns its processes,
+uses a unique /tmp result directory and an isolated ROS domain 83, generates the
+official P3 profile, and changes only temporary fixed pose for fixture viewing.
+One 125 s model/transport deadline, one 20 s warm window, bounded shutdown and
+an inner 165 s/outer 175 s execution timeout. It issues no actuator commands.
+Do not run a mission to validate P4a.
+
+### Actual validation and limitations
+
+Donor backends.py/detector.py/config inspected completely from local remote branch
+`lumyn/Perception`, SHA `608a3b985b8c5dbfc56f5398b8679c8038861bbe`. Safe finite
+response/class/bbox checks, annotation colors and header construction were adapted;
+donor orientation defaults, mission/control logic and raw exception logging were
+excluded. The initial GitHub interpretation returned 404; local branch resolved it.
+
+Final **62 tests passed in 1.31 s**. Parsing/schema/malformed data, clipping,
+centers/errors, empty responses, stale result/model loss/camera silence, latest
+replacement, real ROS headers and annotations, missing/invalid secret, native/
+exception log suppression, full-frame/fixed settings, actual CUDA profile gate
+and CPU-only rejection are covered. Initial host socket-denial failures and a
+ROS Node.context attribute collision were corrected without weakening checks.
+Final ROS package build: **1 package finished in 0.82 s**. Installed launch
+arguments, Python compilation, shell syntax, Compose and diff checks passed.
+
+**ONE bounded live smoke PASSED** at a temporary fixed inspection pose, without
+mission or commands. Inference-container nvidia-smi showed **RTX 4080 Laptop GPU**,
+Windows driver **551.95**, advertised CUDA **12.4**. Actual loaded-model ONNX
+profiling recorded **238 node events, all CUDAExecutionProvider**. Loaded schema
+was pipe/valve/flange. Automatic CPU fallback was disabled after the live run
+(pinned API verified), and an explicit PID-1 SIGTERM handler was added after
+Docker needed forced container termination (137). Adapter/subprocess-shutdown
+tests and final build passed; no second live run was performed.
+
+| Live metric | Measured value |
+| --- | --- |
+| Warm window | 20.002130522 s |
+| Camera | 123 frames; 6.149344934 FPS |
+| Processed outputs | 124 frames; 6.199339609 FPS |
+| Warm latency mean / median | 42.872 / 44.660 ms |
+| Warm latency p95 / max | 76.048 / 93.799 ms |
+| Cold first request including model initialization | 17.631712 s, STALE |
+| Observation age mean / max | 0.106406 / 2.234397 s; outliers explicitly STALE |
+| Whole-smoke detection box counts | pipe 242; valve 127; flange 126 |
+| Paired source headers verified | 126 detection/annotated pairs |
+| Max pending / in flight | 1 / 1 |
+| Pending replacements | 102, primarily during cold initialization |
+| Camera-stop result | CAMERA_STALE; observation_valid=false |
+| Command / thruster publishers | 0 / 0 |
+
+One in-flight result crosses the warm-window boundary, accounting for processed
+count exceeding camera count by one; it is not duplicated inference. Box counts
+span the whole smoke and include duplicate/overlapping pipe detections. They do
+not count unique objects or establish accuracy. READY/STALE/initial unavailable/
+camera-stale states were observed; NO_DETECTION/SCHEMA_ERROR/model-loss behavior
+has focused test coverage. All owned processes and inference service stopped.
+
+Current input is full **320x240 / 145-degree HFOV** with the accepted P3 software
+profile (prior validated rate ~5.399 Hz). Original model validation used full
+**640x480 simulator frames**. Equivalent accuracy at 320x240 is **not claimed**;
+this is a source-frame training/validation versus runtime resolution mismatch,
+not an excuse to invent a crop. Managed model preprocessing remains authoritative.
+Single short fixed-pose evidence does not prove dynamic-scene reliability,
+all access/failure-recovery paths or real-ocean accuracy. Source timing outliers
+and cold-load freshness violations remain explicit. No confidence tuning occurred.
+
+Evidence: container `/tmp/neptune-p4a-smoke-5x78iait/result.json` and simulator/
+empty observer logs; host `/tmp/neptune-p4a-live-result.json`. /tmp is temporary.
+Read-only offline credential scan through the mounted secret found its value in
+**zero of 219 repository files**. Inference output/logging is discarded/disabled;
+observer never sees the key and its actual log was empty. No credential entered
+the repository or logs. No Orientation A integration, pipe-angle estimation,
+visual control, P5, commit or push. Both required project documents were updated.

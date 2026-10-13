@@ -1,0 +1,32 @@
+# Optional P4a service only; does not recreate or launch the ROS dev service.
+services:
+  inspection_inference:
+    image: roboflow/roboflow-inference-server-gpu@sha256:9f91f44c23c067c03182c5b1de4213e5bdd97e393cd412c9bb4bdabdf5bdca29
+    platform: linux/amd64
+    gpus: all
+    ports:
+      - "127.0.0.1:9001:9001"
+    entrypoint: ["python", "-m", "neptune_perception.inference_server"]
+    environment:
+      PYTHONPATH: /opt/neptune
+      USE_INFERENCE_MODELS: "false"
+      ONNXRUNTIME_EXECUTION_PROVIDERS: CUDAExecutionProvider
+      REQUIRED_ONNX_PROVIDERS: CUDAExecutionProvider
+      MODEL_CACHE_DIR: /tmp/roboflow-models
+      ROBOFLOW_HOME: /tmp/roboflow-home
+      DISABLE_VERSION_CHECK: "true"
+      DISABLE_TELEMETRY: "true"
+      LOG_LEVEL: ERROR
+    volumes:
+      - ../src/neptune_perception/neptune_perception:/opt/neptune/neptune_perception:ro
+      - type: bind
+        source: ${HOME}/.config/neptune/roboflow_api_key
+        target: /run/secrets/roboflow_api_key
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:size=2g
+    # Third-party stdout/stderr is also discarded by the adapter before imports.
+    logging:
+      driver: none
