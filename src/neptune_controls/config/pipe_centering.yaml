@@ -1,0 +1,10 @@
+pipe_centering:
+  ros__parameters:
+    kp: 0.5
+    max_sway: 0.25
+    deadband: 0.05
+    freshness_s: 0.5
+    confirmation_count: 3
+    control_rate_hz: 20.0
+    # Zero disables motion until the P5a empirical sign calibration is recorded.
+    sway_sign: 0.0

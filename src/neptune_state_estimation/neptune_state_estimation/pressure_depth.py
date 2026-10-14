@@ -153,7 +153,8 @@ def main(args=None):
         node.destroy_node()
 
         # Shut down ROS communication.
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

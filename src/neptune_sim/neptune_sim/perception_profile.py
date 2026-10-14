@@ -11,7 +11,7 @@ VISION_TYPES = {
 
 
 def write_performance_scenario(package_share, output_directory):
-    """Write a 320x240 inspection-only scene; retain original physics and spawn."""
+    """Write a 320x240/80-degree inspection scene; retain physics and spawn."""
     share = Path(package_share)
     output = Path(output_directory)
     scene = ET.parse(share / 'scenarios/benchmarks/03_port_pipe_perception.scn')
@@ -23,6 +23,9 @@ def write_performance_scenario(package_share, output_directory):
     specs = camera.find('specs')
     specs.set('resolution_x', '320')
     specs.set('resolution_y', '240')
+    # Match the training optics more closely and improve servo pixel sensitivity.
+    # This edits only generated performance XML, never the ordinary/demo camera.
+    specs.set('horizontal_fov', '80.0')
     for sensor in list(robot.findall('sensor')):
         if sensor is not camera and sensor.get('type') in VISION_TYPES:
             robot.remove(sensor)

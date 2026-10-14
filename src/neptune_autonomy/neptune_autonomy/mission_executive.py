@@ -1,9 +1,16 @@
 import math
+import json
+import signal
+import time
 import rclpy
 
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Bool, String
+from std_srvs.srv import Trigger
+from rclpy.qos import QoSProfile, DurabilityPolicy
+from rclpy.signals import SignalHandlerOptions
 
 
 def clamp(value, limit):
@@ -23,8 +30,24 @@ def quaternion_yaw(q):
 
 class MissionExecutive(Node):
 
-    def __init__(self):
-        super().__init__('mission_executive')
+    def __init__(self, **node_options):
+        super().__init__('mission_executive', **node_options)
+
+        # Demo readiness is opt-in; ordinary Stage 1 startup is unchanged.
+        self.demo_mode = self.declare_parameter('demo_mode', False).value
+        self.start_requested = self.declare_parameter('auto_start', True).value
+        self.state_timeout = self.declare_parameter('state_timeout_s', 0.5).value
+        self.demo_ready = False
+        self.readiness_received = None
+        self.state_received = None
+        self.mission_timed_out = False
+        status_qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.status_pub = self.create_publisher(String, '/neptune/mission/status', status_qos)
+        if self.demo_mode:
+            self.create_subscription(
+                Bool, '/neptune/demo/ready', self.readiness_callback, status_qos,
+            )
+            self.create_service(Trigger, '/neptune/mission/start', self.start_demo)
 
         self.cmd_pub = self.create_publisher(
             Twist,
@@ -43,7 +66,7 @@ class MissionExecutive(Node):
         # Mission
         # --------------------------------------------------
 
-        self.state = 'WAIT_FOR_STATE'
+        self.state = 'INITIALIZING' if self.demo_mode else 'WAIT_FOR_STATE'
 
         self.home_x = None
         self.home_y = None
@@ -61,6 +84,7 @@ class MissionExecutive(Node):
 
         self.state_start = None
         self.mission_start = None
+        self.mission_end = None
 
         # --------------------------------------------------
         # Vehicle state
@@ -115,12 +139,68 @@ class MissionExecutive(Node):
         self.get_logger().info(
             'Mission executive ready.'
         )
+        self.create_timer(0.2, self.publish_status)
+        self.publish_status()
+
+    def readiness_current(self):
+        return (self.demo_ready and self.readiness_received is not None
+                and time.monotonic() - self.readiness_received < self.state_timeout)
+
+    def state_current(self):
+        return (self.state_received is not None
+                and time.monotonic() - self.state_received < self.state_timeout)
+
+    def readiness_callback(self, message):
+        self.demo_ready = message.data
+        self.readiness_received = time.monotonic()
+        if self.state == 'INITIALIZING' and self.start_requested and self.readiness_current():
+            self.transition('WAIT_FOR_STATE')
+
+    def start_demo(self, _request, response):
+        if self.state != 'INITIALIZING':
+            response.success = False
+            response.message = 'Mission has already started; restart the launch for a new mission.'
+        elif not self.readiness_current() or not self.state_current():
+            response.success = False
+            response.message = 'Required sensors/state have not passed demo initialization.'
+        else:
+            self.start_requested = True
+            self.transition('WAIT_FOR_STATE')
+            response.success = True
+            response.message = 'Mission armed; waiting for the next canonical state update.'
+        return response
+
+    def publish_status(self):
+        finish = self.mission_end if self.mission_end is not None else self.get_clock().now()
+        elapsed = (0.0 if self.mission_start is None else
+                   (finish - self.mission_start).nanoseconds / 1e9)
+        self.status_pub.publish(String(data=json.dumps({
+            'state': self.state,
+            'mission_elapsed_s': elapsed,
+            'complete': self.state == 'COMPLETE' and not self.mission_timed_out,
+            'outcome': 'TIMEOUT' if self.mission_timed_out else (
+                'COMPLETE' if self.state == 'COMPLETE' else 'RUNNING'),
+            'demo_mode': self.demo_mode,
+            'ready': self.readiness_current() if self.demo_mode else self.state_current(),
+            'start_requested': self.start_requested,
+            'state_fresh': self.state_current(),
+            'movement_authority': 'mission_executive',
+        })))
 
     # ======================================================
     # STATE ESTIMATION INPUT
     # ======================================================
 
     def odom_callback(self, msg):
+
+        if self.demo_mode:
+            p, q = msg.pose.pose.position, msg.pose.pose.orientation
+            values = [p.x, p.y, p.z, q.x, q.y, q.z, q.w,
+                      msg.twist.twist.linear.x, msg.twist.twist.angular.z]
+            if (not all(math.isfinite(value) for value in values)
+                    or abs(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w - 1.0) > 0.02):
+                return
+        self.state_received = time.monotonic()
 
         now = self.get_clock().now()
 
@@ -157,7 +237,8 @@ class MissionExecutive(Node):
         self.prev_time = now
 
         # First odometry message defines HOME.
-        if self.state == 'WAIT_FOR_STATE':
+        if self.state == 'WAIT_FOR_STATE' and (
+                not self.demo_mode or (self.readiness_current() and self.start_requested)):
 
             self.home_x = self.x
             self.home_y = self.y
@@ -209,12 +290,15 @@ class MissionExecutive(Node):
 
         self.state = new_state
         self.state_start = self.get_clock().now()
+        if new_state == 'COMPLETE':
+            self.mission_end = self.state_start
 
         self.depth_integral = 0.0
 
         self.get_logger().info(
             f'========== {new_state} =========='
         )
+        self.publish_status()
 
     def state_elapsed(self):
 
@@ -409,6 +493,12 @@ class MissionExecutive(Node):
 
     def control_loop(self):
 
+        if self.demo_mode and (
+                self.state in ('INITIALIZING', 'WAIT_FOR_STATE')
+                or not self.readiness_current() or not self.state_current()):
+            self.publish_command()
+            return
+
         if (
             self.x is None
             or self.y is None
@@ -429,6 +519,8 @@ class MissionExecutive(Node):
             ).nanoseconds / 1e9
 
             if elapsed > 420.0:
+
+                self.mission_timed_out = True
 
                 self.get_logger().error(
                     'MISSION TIMEOUT'
@@ -639,7 +731,11 @@ class MissionExecutive(Node):
 
 def main(args=None):
 
-    rclpy.init(args=args)
+    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
+    old_handlers = {
+        sig: signal.signal(sig, signal.default_int_handler)
+        for sig in (signal.SIGINT, signal.SIGTERM)
+    }
 
     node = MissionExecutive()
 
@@ -662,6 +758,8 @@ def main(args=None):
 
         if rclpy.ok():
             rclpy.shutdown()
+        for sig, handler in old_handlers.items():
+            signal.signal(sig, handler)
 
 
 if __name__ == '__main__':

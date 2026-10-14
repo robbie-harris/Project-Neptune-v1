@@ -1,22 +1,33 @@
-# Perception integration — P1 / P2 / P3 / P4a / P4b / P4c
+# Perception integration — P1 / P2 / P3 / P4a / P4b / P4c / P5a
 
-P0 audit complete. P1a added the optional pipe/flange scene; P1b adds its valve.
-P2 lateral thrusters + lights is implemented; unit/build and physics actuation
-checks pass, but full graphical actuation remains unverified because simulator
-ROS callbacks stalled. **P3 COMPLETE WITH PERCEPTION PROFILE**: the explicit
-320x240 software performance profile passes the minimum >=5 Hz / <0.5 s gate.
-Configured 10 Hz is not achieved wall throughput. **P4a COMPLETE: observation-only
-Inspection Objects pipeline; bounded GPU smoke passed. P4b COMPLETE: A1 robust
-pipe detector, with no physical orientation estimate. P4c COMPLETE: exact-source dual-model association, N=1/N=1 GPU smoke passed
-at 6.697 Hz fresh selected targets. P5 next only when assigned, not started.**
-Polished rendering is deferred to P8. Stage 2 remains frozen
-through S2.6. The environment now contains pipe, flange, and valve categories;
-Inspection Objects is integrated; orientation estimation remains unavailable.
+**Demo V0: FULL MOVEMENT MISSION VALIDATED — MAJOR MOVEMENT/INTEGRATION PASS.**
+The user manually validated `./scripts/run_demo_v0.sh` through INITIALIZING ->
+WAIT_FOR_STATE -> DIVE -> TRANSIT -> INSPECT -> RETURN -> ASCEND -> COMPLETE.
+**G1/G2/G3 PASS — GRAPHICS / GPU RUNTIME VALIDATED.** Frozen runtime: accelerated
+D3D12 / RTX 4080 Laptop GPU, dynamic seven-thruster Girona, 1280x720 LOW Stonefish
+viewport, inspection RGB 320x240/80-degree HFOV/configured 10 Hz. Graphics plus
+CUDA coexistence was proven separately in G3. GUI and camera stream are WORKING.
 
-P3c tested two native camera candidates; both failed acceptance. They remain
-**NOT ACTIVE / NOT PART OF NORMAL BUILD / FAILED ACCEPTANCE**. The approved P3
-profile uses the original native library. Historical blocked records below are
-superseded by the final P3 completion record at the end of this document.
+**Known visual issue:** camera appears AFT/backward; inspection lights appear
+backward or share an incorrect mounting convention and require verification.
+A local mounting-transform/orientation-convention or 180-degree issue is suspected,
+not proven. Movement completion, state estimation, streaming, GUI, graphics and
+seven-thruster integration were successful despite this issue. Next: inspect/correct
+only Girona body-frame convention, camera mounting/optical-frame transforms and
+light mounting/orientation, then a short forward-facing asset/lighting visual check.
+
+P0/P1/P2 scene/vehicle work and P4a/P4b/P4c implementations are preserved.
+**P5a IMPLEMENTED — LIVE CLOSED-LOOP VALIDATION DEFERRED.** Existing sign=0,
+controller/configuration/tests/diagnostic scripts are unchanged; historical
+calibration failures remain evidence. P5b NOT STARTED; Stage 2 frozen through S2.6.
+Demo V1 passive perception overlays are next **after camera/light orientation fix**;
+renewed P5a perception-driven alignment also requires that fix. Demo V0 starts no
+inference server, detectors, fusion or P5 controller. No next task is started here.
+
+The prior software performance and ordinary camera launches remain explicit
+legacy profiles. Historical D3D12 failures and rejected P3c patches below are
+superseded by the G1/G2/G3 runtime results, not deleted. **No rejected native
+patch is active; no Mesa/WSL/driver/Stonefish change is part of Demo V0.**
 
 Source: donor `608a3b985b8c5dbfc56f5398b8679c8038861bbe`, `Simulation/assets/flange.obj`, copied byte-for-byte to
 `src/neptune_sim/assets/perception/flange.obj`.
@@ -1546,3 +1557,983 @@ config/pipe_fusion.yaml, launch/dual_models.launch.py, test/test_fusion.py and
 test/test_fusion_node.py; scripts/perception_p4c_smoke.py and run_p4c_smoke.sh;
 docs/PROJECT_HANDOFF.md and docs/PERCEPTION_INTEGRATION.md. No unrelated package
 changed. **P5 NOT STARTED. No commit or push occurred.**
+
+
+## P5a lateral pipe centering — IMPLEMENTED / LIVE VALIDATION BLOCKED
+
+P5a controller and standalone routing are implemented. **P5a is NOT COMPLETE:**
+the one permitted positive-sway calibration pulse did not establish a reliable
+image/control sign. Closed-loop validation was therefore not started. P5b is
+next only after P5a acceptance and explicit assignment; **P5b NOT STARTED**.
+Stage 2 remains frozen through S2.6. No commit or push occurred.
+
+### Architecture, contract and engineering parameters
+
+`neptune_controls.pipe_centering` is a ROS-independent proportional controller;
+`pipe_centering_node` adapts the existing authoritative P4c
+`/neptune/perception/fused_status` std_msgs/String JSON to
+`/neptune/control/alignment_cmd_body` geometry_msgs/Twist. No typed selected-target
+message exists. A strict consumer parser keeps this scope small without changing
+P4c or introducing a new interface package. It checks top-level/target validity,
+association, exact integer source stamp, finite geometry consistent with the
+normalized error, dimensions, selected model/provenance, selected model readiness,
+source age and upstream receipt/observation ages. CONSENSUS, INSPECTION_ONLY and
+ORIENTATION_A_ONLY are eligible; AMBIGUOUS never commands motion. No confidence
+threshold or perception/model behavior changed.
+
+Equation outside deadband: `sway = clip(sway_sign * Kp * horizontal_error,
+-max_sway, +max_sway)`. All other Twist fields are zero. Inside deadband and on
+any invalid/unavailable/lost/stale input, output is zero. Parameters are read at
+startup:
+
+| Parameter | Current engineering default |
+| --- | --- |
+| Kp | 0.5 |
+| max_sway | 0.25 (parameter constrained to <=1, so output also lies in [-1,1]) |
+| horizontal deadband | 0.05, inclusive |
+| freshness timeout | 0.5 s |
+| confirmation count | 3 distinct fresh source stamps |
+| control rate | 20 Hz, steady-clock timer |
+| sway_sign | **0.0, deliberately disabled; no operational sign accepted** |
+
+Source age and steady elapsed time both expire observations. Initial upstream
+age plus steady elapsed time prevents watchdog duplicates or a frozen ROS clock
+from rejuvenating old data. Fresh observations are reused between perception
+updates. Repeated source stamps do not increase confirmation. Loss/staleness or
+an out-of-deadband fresh observation resets consecutive confirmation. States:
+WAITING_FOR_TARGET, ALIGNING, ALIGNED, TARGET_LOST, STALE, AMBIGUOUS,
+INVALID_TARGET, PERCEPTION_UNAVAILABLE and SIGN_UNCALIBRATED. Status publishes on
+`/neptune/control/alignment_status`. Shutdown sends a final zero while ROS is alive;
+the unchanged vehicle adapter supplies its existing independent watchdog.
+No integral, smoothing, tracking, angle inference, yaw control or hold axis exists.
+
+The explicit `pipe_centering_standalone.launch.py` remaps only the dedicated
+alignment output to `/neptune/cmd_body` and starts the existing seven-motor adapter.
+It starts no autonomy, mission, estimator or other controller. Run only when normal
+mission command publishers are stopped. This is explicit test routing, not P7
+command ownership/arbitration. Default node output never publishes `/neptune/cmd_body`.
+With current sign=0 configuration, the launch cannot move the vehicle.
+
+Build after sourcing ROS and the existing vehicle overlay:
+
+```bash
+colcon --log-base /tmp/neptune-p5a-log build \
+  --build-base /tmp/neptune-p5a-build --install-base /tmp/neptune-p5a-install \
+  --packages-select neptune_controls
+source /tmp/neptune-p5a-install/setup.bash
+ros2 launch neptune_controls pipe_centering_standalone.launch.py
+```
+
+Camera/model launches remain independent and unchanged. The bounded experiment
+runner is `bash scripts/run_p5a_smoke.sh sign|closed`, isolated ROS domain 87,
+shared perception runtime lock, owned inference service, 185 s inner /195 s outer
+bounds and bounded cleanup. It warms both P4c models at a fixed pose using the
+accepted P3 320x240/145-degree llvmpipe/eight-worker/160x120-preview profile, then
+restarts only its simulator at the same dynamic inspection pose. No native library,
+body physics, allocation or repository scenario changes. Closed mode refuses an
+uncalibrated sign before launching a simulator. The runner also rejects competing
+body-command publishers. Do not rerun the sign pulse under the present one-test
+authorization; an additional calibration requires a separately authorized task.
+
+### Actual live sign experiment and failure
+
+**Exactly one actual sway pulse; zero closed-loop trials.** Earlier startup
+attempts failed before a pulse: overlay ordering hid the P3 helper, simulator
+service discovery timed out, then the respawn service advertised but failed to
+respond. Fixed-pose warmup followed by a simulator restart avoided that service.
+An initial dynamic pose at y=0.7 m yielded error +0.040625, so the off-center guard
+stopped it before any command. The actual pulse used starting pose
+(-18.5, +1.5, 3.0) m, yaw pi; no pose or ground truth fed the controller.
+
+| Sign-test measurement | Recorded value |
+| --- | --- |
+| Initial normalized horizontal error | +0.343750 |
+| After-pulse error | +0.337500 |
+| Change | -0.006250 (one pixel at width 320) |
+| Initial selected center (u,v) | (215.0, 119.5) px |
+| After-pulse selected center (u,v) | (214.0, 121.5) px |
+| Positive pulse | +0.22 for nominal 3.0 s |
+| Observed first positive command to zero interval | 3.019300 s |
+| Maximum sway / other axes | 0.22 / all zero |
+| Recorded body commands | 54, final command all zero |
+| Unique fresh selected outputs during pulse window | 6, all CONSENSUS |
+| Largest interval between recorded fresh outputs | 1.997887 s |
+| Horizontal sign crossings | 0 |
+| Sign response gate | FAIL: abs(delta)=0.00625 <=0.01 |
+
+The direction weakly suggests sign +1 (positive sway decreased positive image
+error), but the response is too small compared with observed half-pixel bbox
+variation to accept as a reliable calibration. **No experimentally verified sign
+is claimed and configuration remains zero.** Native motor thrust/displacement
+was not observed; ROS command delivery alone cannot establish native actuation.
+P2's graphical actuator callback limitation remains relevant but is not proven
+to be the cause of this result. Dynamic fresh-output gaps also require follow-up;
+the retained fixed-pose P4c ~6.7 Hz result does not establish dynamic throughput.
+
+No closed-loop starting/final error, time to deadband, maximum closed-loop command,
+overshoot, alignment state or three-frame live confirmation exists. Controller
+live safety on loss was not exercised. Sign-run records retain unique sequences
+rather than every watchdog repeat, so exact live stale/lost/ambiguous episode
+counts cannot be reconstructed; do not claim zero stale events from these six
+consensus outputs. The final runner now retains fusion state transitions for
+future authorized use. Pure/ROS tests cover fail-closed behavior independently.
+No continuing stale controller motion occurred because the controller was never
+routed live. The manual calibration pulse ended with zero, and cleanup stopped
+all owned simulator/model/adapter processes. Subsequent process audit found no
+P5a processes in domain 87; inference service was stopped.
+
+Ground truth was **not consumed at all**, including by the runner; lateral
+truth displacement is unavailable. `/state/odometry` remains canonical and
+`/sim/odometry` remains evaluation-only. Neither influences P5a commands.
+
+Evidence: container `/tmp/neptune-p5a-sign-cej61wbr/result.json`, before.png,
+fixed_simulator.log, dynamic_simulator.log and observer/adapter logs; host
+`/tmp/neptune-p5a-sign-result.json`, `/tmp/neptune-p5a-sign-output.txt` and
+`/tmp/neptune-p5a-before.png`. BEFORE frame shows the selected pipe right of
+center. AFTER image was not saved because the response gate failed before that
+save in the actual run; numeric after-source metadata is retained. The final
+runner saves the after frame before applying its gate. No debug image is committed.
+Temporary evidence can expire.
+
+### Validation and remaining limits
+
+- Smallest initial pure suite: 28 passed; final pure suite: **31 passed**.
+- Final focused ROS controls plus unchanged perception suite: **195 passed in
+  3.13 s** (37 controller/adapter tests, all 158 existing perception tests).
+  Tests cover both configurable signs, positive/negative/zero/deadband outputs,
+  saturation/extreme values, invalid/stale/ambiguous/unavailable/lost targets,
+  multiple fresh-source confirmation, reset, frozen/backward clock, duplicate
+  watchdog expiry, default topic isolation and zero unowned axes. The required
+  assertion against an *experimentally verified* sign remains pending calibration.
+- Controls package suite, from correct package working directory: **38 passed,
+  1 failed, 1 skipped in 0.36 s**. Failure is existing flake8 import ordering in
+  untouched depth_hold.py and waypoint_hold.py; new files have no lint errors.
+  Pep257 passes; existing copyright test skips. An earlier invocation from the
+  workspace root unintentionally linted the whole workspace and failed flake8/
+  pep257; rerunning from the package isolated the relevant results. New-file
+  lint errors were fixed without changing unrelated modules or weakening tests.
+- neptune_controls build: **PASS, 1 package, 1.52 s** final. Initial missing
+  neptune_vehicle overlay caused build failure; sourcing the existing P2 overlay
+  resolved it, with the expected installed-workspace-dependency warning.
+  Perception, vehicle and simulator sources are unchanged; no rebuild required.
+- Installed standalone launch --show-args, Python compilation, runner bash syntax
+  and diff checks pass. No additional live trial was used for these checks.
+
+The controller is ready for a separately authorized calibration investigation,
+but this is not an accepted closed-loop centering result. Engineering gains are
+untuned; vehicle buoyancy can change depth during sway-only operation, and no
+heading/depth hold or target identity tracking is provided. P4c geometric selection
+can switch between fragments; dynamic model performance, actuation, sign and
+convergence remain unresolved. **Physical pipe angle and yaw alignment remain
+unimplemented. Full mission/state transitions and state estimation are unchanged.
+P5b and P7 were not started. No commit or push occurred.**
+
+Changed files: controls setup.py/package.xml; new pipe_centering.py,
+pipe_centering_node.py, config/pipe_centering.yaml,
+launch/pipe_centering_standalone.launch.py, test/test_pipe_centering.py,
+test/test_pipe_centering_node.py; scripts/perception_p5a_smoke.py,
+scripts/run_p5a_smoke.sh; docs/PROJECT_HANDOFF.md and docs/PERCEPTION_INTEGRATION.md.
+
+
+## P5a 80-degree validation and freshness investigation — BLOCKED
+
+**P5a remains BLOCKED BY INTEGRATED PERCEPTION FRESHNESS, not COMPLETE.** The
+performance camera change and fixed-pose P4 regression pass. The dynamic
+calibration runtime cannot maintain its required fresh observation window.
+One 80-degree pulse aborted safely; the subsequently authorized corrected attempt
+failed before any nonzero command. The later no-motion diagnostic below passed at
+a fixed pose, but did not establish the exact native cause of the dynamic camera
+stall. No further pulse or closed-loop trial ran. P5b NOT STARTED. Stage 2 remains
+frozen through S2.6. No commit or push occurred. This record supersedes the earlier
+P5a record's current 145-degree profile description; prior evidence remains history.
+
+### Performance optics and regression
+
+Only generated performance/alignment XML changes HFOV **145 -> 80 degrees**,
+still **320x240**, nominal **10 Hz**, llvmpipe/eight workers, low graphics,
+160x120 preview and 100 Hz physics. Original/demo camera XML remains
+640x480/145 degrees. Camera mount, image/info topics and native CameraInfo
+publication are unchanged. No intrinsic is hard-coded. The narrower HFOV is
+close to the donor training optics and improves servo pixel sensitivity about
+3.78 times at the same resolution, reducing optical-domain mismatch without
+increasing pixel count. Rendering cost is not guaranteed identical, and equivalent
+model accuracy at 320x240 remains unproven.
+
+Actual Stonefish CameraInfo: fx=fy=**190.6805748150736 px**, cx=160, cy=120;
+K=[fx,0,160; 0,fy,120; 0,0,1]; P=[fx,0,160,0; 0,fy,120,0; 0,0,1,0];
+D=[0,0,0,0,0], plumb_bob. Frame remains
+GIRONA500/inspection_camera_optical_frame.
+
+The first short fixed-pose check at (-16,0.4,3), yaw pi detected both models and
+exact-source selections, but selected a near-centered target (median error
++0.046875, x=167.5) and included ambiguous outputs. Only the test pose was adjusted
+to (-16,+0.8,3), yaw pi. Its **3.1073 s** warm regression produced **13 CONSENSUS
+selected outputs**, median error **+0.24375**, x=**199 px**, valve/flange **13/13**,
+100% exact camera/model/fusion source matching and pending zero. No movement ran.
+Later fixed-pose windows also passed, with detector geometry variation producing
+median error +0.178125/x=188.5 in the final gated-attempt warmup; target identity
+tracking is not provided by P4c.
+
+### Gated calibration attempts
+
+The first 80-degree run gathered five individually fresh before samples with
+medians **+0.24375 / 199 px**, then began +0.25 sway. It explicitly stopped when
+fused status became **STALE at 1.02785 s**, before completing four seconds. Last
+recorded positive command was at 1.00016 s; the stop was published but was not
+captured by that attempt's local recorder before cleanup. Three unique fresh
+outputs were CONSENSUS; last fresh error +0.240625. Evaluation-only displacement
+was **+0.0038857643 m** along the initial body lateral axis (world displacement
+approximately [0.00074484,-0.00388577,-0.10529746] m, 34 truth samples). No complete
+after median or accepted sign exists. This does not demonstrate actuator failure.
+
+The before-sample collector had retained samples across stale watchdog repeats
+and gaps of approximately 0.85 and 0.54 s. This was a **harness qualification bug**,
+not a controller or fusion freshness bug. The corrected collector resets on every
+invalid watchdog episode and any >0.5 s receipt gap, excludes samples preceding
+that invalid episode, and requires five consecutive fresh observations. Publisher
+discovery now occurs before collecting the window; the pulse also checks target
+validity/source age every iteration, with unchanged 0.5 s limit and magnitude/duration.
+Zero publication is drained through the local observer before teardown.
+
+The user explicitly authorized one corrected attempt and required STOP if it
+failed. That attempt reached dynamic warmup but **could not collect the five-frame
+window within 15 s**, and sent **zero nonzero commands**. At failure: fused STALE,
+valid=false, source age **15.30529 s**, receipt age **15.20776 s**, sequence 21;
+both model states **CAMERA_STALE**. No before/after calibration medians or pulse
+displacement exist for this corrected attempt. All owned processes were stopped;
+dynamic simulator required forced shutdown. No third pulse ran.
+
+The only controller change remains the original P5a implementation; its algorithm
+was not redesigned in this follow-up. Configuration remains sign **0.0** (motion
+disabled), Kp **0.5**, max sway **0.25**, deadband **0.05**, freshness **0.5 s**,
+confirmation **3 distinct fresh sources**, rate **20 Hz**. Equation remains
+clip(sign*0.5*horizontal_error,-0.25,+0.25), zero inside deadband or on loss.
+No experimentally accepted sign or live ALIGNED result is claimed.
+
+### Standalone versus integrated runtime
+
+| Aspect | Successful historical P4c smoke | Failed P5a sign runtime |
+| --- | --- | --- |
+| Simulator | One fixed-body instance, (-18.5,0,3), no restart | Fixed model warmup, then stop/restart with free dynamic body at (-16,0.8,3) |
+| Camera | 320x240/145 degrees | 320x240/80 degrees; auxiliary vision still excluded |
+| Render/runtime | llvmpipe, eight workers, 160x120/low, 100 Hz, original library | Same settings/library; free-body physics and changing view after restart |
+| Observer processes | Inspection Objects, A1, pipe_fusion, smoke observer | Same, plus seven-motor adapter; controller absent during both failed sign attempts |
+| Topics added to telemetry | None | CameraInfo, annotated image and evaluation-only odometry subscriptions, body-command monitoring |
+| Topics added for control | None | /neptune/cmd_body and /sim/thruster_setpoints; later diagnostic also alignment_status |
+| Executor model | Separate single-threaded ROS process per observer; one HTTP worker each | Same; adapter separate executor; smoke uses bounded spin_once polling |
+| Logging | Redirected startup logs, result serialization after measurement | Same; no image writes or synchronous HTTP in measured callback loop |
+| Telemetry QoS | P4c camera uses sensor-data BEST_EFFORT | P5a diagnostic camera/info/annotation telemetry uses RELIABLE depth 10; detectors remain BEST_EFFORT depth 1 |
+
+The controller **was not started in the failed sign runs**, ruling out its timer
+as their cause. Each detector subscription only replaces a latest-frame slot;
+conversion/PNG/HTTP/response parsing execute in its own one-worker thread pool.
+Single-threaded detector timers consume completed futures without waiting on HTTP.
+Fusion uses a separate process, bounded exact-source cache, no HTTP or blocking
+wait. Controller and adapter each have separate single-threaded executors. No
+Python executor or callback group is shared between them and perception.
+
+Native Stonefish uses rclcpp::spin(single-threaded); its 16.667 ms timer calls the
+entire graphical LoopInternal. Its physics thread and llvmpipe workers are separate.
+Long native render/physics work can delay native callbacks. Native physics permits
+large unbounded elapsed-time catch-up. These are **candidates**, not a demonstrated
+low-level root cause; no native thread trace from the failed dynamic process exists.
+The actual loaded library retains SHA-256
+5a566fdf108cb5246105aab5faeb29e2beeebe1bac653d77a841788beaa677f4,
+matching the historical original library. No rejected P3c patch was enabled.
+
+The **immediate fault location is established**: camera delivery stops upstream
+of both detector workers, which report CAMERA_STALE; fusion correctly expires the
+last source. Detection loss alone would not produce CAMERA_STALE. The exact native
+reason (dynamic physics/rendering versus restart-related runtime behavior) is
+**not proven**. The previous sign runner did not retain raw camera receipt timing,
+per-model status timelines or native thread/resource traces, so its raw-camera FPS
+and inference latency cannot be retrospectively reconstructed from selected outputs.
+Do not describe selected-output gaps as measured raw camera FPS.
+
+### One 12-second integrated no-motion diagnostic
+
+The new `diagnostic` mode in scripts/run_p5a_smoke.sh launches both models,
+fusion, the actual 20 Hz controller (explicit sign=0), seven-motor adapter and all
+P5a telemetry in isolated domain 87. The vehicle is fixed to guarantee **no vehicle
+motion**, not merely zero commands. There is no fixed-to-dynamic simulator restart.
+After cold initialization/stable perception, it measures **12.0003194 s** and
+writes timing/resource data only after that window. This is one short diagnostic,
+not a repeated benchmark or proof of dynamic operation.
+
+| Metric | Actual no-motion result |
+| --- | --- |
+| Camera | 56 frames / **4.666542 Hz** |
+| Maximum camera receipt gap | **0.246275 s** |
+| Inspection Objects | **4.583211 Hz**, latency mean **48.360 ms**, max **70.011 ms** |
+| A1 | **4.666542 Hz**, latency mean **84.498 ms**, max **129.928 ms** |
+| Fused fresh selected outputs | 56 / **4.666542 Hz**, all CONSENSUS |
+| Maximum valid-output gap, including window edges | **0.300037 s** |
+| Maximum new-output target age | **0.197152 s** |
+| Maximum target age over valid watchdog repeats | **0.375537 s** |
+| Controller callback rate | **19.999468 Hz** |
+| Warm latest replacements / stale completions | **0 / 0**, both models |
+| Max pending / in-flight | **0 / 1**, both models |
+| Exact matched selected sources | **56/56** |
+| Model-arrival skew mean / max | **0.037015 / 0.095857 s**, below 0.20 s association window |
+| Cache pending / evictions / mismatches / schema errors | **0 / 0 / 0 / 0** |
+| Body commands | All six fields zero throughout |
+
+One result straddling the measurement boundary accounts for Inspection Objects'
+counter-based count differing by one from camera/A1/fusion; no duplicate source
+was counted. Timings include the whole warm window, not startup. All no-motion
+stability criteria pass; there was no post-fix repeat because no runtime fix was
+proven necessary at this fixed pose.
+
+Per-process CPU means, percent of one CPU (can exceed 100): simulator **395.66%**,
+Inspection **4.42%**, A1 **4.17%**, fusion **6.25%**, adapter **2.50%**, controller
+**3.92%**. RSS KiB: simulator 397884; Inspection 186484; A1 186940; fusion 171600;
+adapter 70652; controller 71140 (RSS includes shared mappings). No configured
+container CPU quota or memory limit. GPU point samples during diagnostic/cleanup
+were **8–38%**, approximately **1393–1422 MiB** while models remained loaded;
+these are point samples, not a utilization integral. No resource saturation was
+established. The native renderer dominates observed dev-process CPU cost, but
+those numbers do not establish the failed dynamic run's CPU behavior.
+
+Logs from failed calibration were approximately 5 KiB per simulator, zero bytes
+for each perception observer and 129 bytes for adapter startup; no log flood exists.
+The diagnostic likewise performs no disk writes during its measurement window.
+Additional zero-control nodes therefore do **not** reproduce multi-second stale
+output at a fixed pose. The remaining important difference is the unvalidated free
+body/restart path, not a demonstrated model-speed or shared-executor defect.
+
+No controller/perception/runtime safety fix was applied on speculation. Fixes are
+limited to correct harness fresh-window qualification and added measurement mode.
+**A further motion calibration is not justified by this fixed-pose result alone**:
+the dynamic camera stall remains unresolved and the prior corrected attempt failed
+its required window. No further pulse or closed-loop motion was run. P5a remains
+blocked; future work must isolate the dynamic/restart path without weakening safety.
+
+### Validation, evidence and scope
+
+- Profile preservation test: PASS; generated 80-degree XML, original 145-degree
+  demo untouched, same scalar/actuator/physics/spawn contract, auxiliary vision excluded.
+- Combined relevant simulation/evaluation/control/perception tests: **237 passed
+  in 2.89 s**. Earlier focused subset: 198 passed after correcting an invalid
+  quaternion in the new evaluation-test fixture. New-file lint: PASS. Historical
+  controls package lint failures in untouched controllers remain recorded above.
+- neptune_sim, neptune_controls, neptune_evaluation build: **3 packages passed,
+  1.55 s** final, expected installed vehicle/Stonefish dependency warnings.
+- Final harness Python syntax, bash syntax and diff checks pass. Controller code,
+  model thresholds, freshness settings, mission, estimation and allocation unchanged.
+- Evidence: container `/tmp/neptune-p5a-80-regression-fn4hc0jk/result.json`,
+  `/tmp/neptune-p5a-80-sign-zlci34pb/result.json`,
+  `/tmp/neptune-p5a-80-sign-dkg3xni5/result.json`,
+  `/tmp/neptune-p5a-80-diagnostic-07dgwbdl/result.json` (includes full model start/end/
+  receipt/fusion/camera timelines and CPU/RSS data). Host temporary output files
+  `/tmp/neptune-p5a-80-{regression2,sign,sign2}-output.txt`,
+  `/tmp/neptune-p5a-diagnostic-output.txt`, `/tmp/neptune-p5a-diagnostic-gpu.txt`,
+  and `/tmp/neptune-p5a-80-before.png`. No valid AFTER frame exists for aborted or
+  pre-window-failed attempts. No debug images committed.
+- Diagnostic cleanup and process audit passed; no P5a process remained and owned
+  inference stopped. GPU sampler ended when its container stopped.
+
+Changes in this follow-up: neptune_sim/perception_profile.py and new profile test;
+new neptune_evaluation/lateral_motion.py and its test (truth consumed solely inside
+that evaluation module, reported only after experiment decisions); both P5a smoke
+scripts; docs/PROJECT_HANDOFF.md and docs/PERCEPTION_INTEGRATION.md. Original P5a
+controls additions remain uncommitted from the preceding implementation. The
+controller never receives truth; /state/odometry stays canonical. **Pipe-angle and
+yaw alignment remain unimplemented. P5b NOT STARTED. No commit/push occurred.**
+
+
+## P5a dynamic-versus-restart isolation — BLOCKED (2026-10-13)
+
+**P5a remains BLOCKED.** Exactly the two requested zero-command experiments ran,
+within the 15-minute budget; no sway pulse or additional simulation trial ran.
+A reproduced the severe camera-delivery gap with **direct dynamic startup and no
+restart**. B completed a **fixed-to-fixed restart without STALE**, but its 3.50 Hz
+camera /3.67 Hz fusion missed the >=4 Hz acceptance gate. Neither is an accepted
+P5a calibration runtime. The severe failure is associated with the free/dynamic
+path, and does not require restart. A specific native rendering/physics bottleneck
+is still unproven; no speculative native/model/controller fix was applied.
+P5b NOT STARTED; Stage 2 frozen through S2.6; no commit or push occurred.
+
+### Experiments and actual measurements
+
+Both used the unchanged P5a 320x240/80-degree performance helper, original native
+library, llvmpipe/eight workers, 160x120/low preview, 100 Hz physics, intended
+(-16,+0.8,3) pose/yaw pi, domain 87, both detectors, fusion, seven-motor adapter,
+and controller explicitly sign=0. All six body-command fields remained zero,
+including startup. Truth drift was recorded only inside neptune_evaluation.
+A started one fresh free-body simulator directly; B kept its body fixed across
+the same stop/relaunch helper used in the calibration runner. No respawn or sensor
+enable service was called in either experiment.
+
+| Clean measurement | A: dynamic, no restart | B: fixed after restart |
+| --- | --- | --- |
+| Window | 12.000220 s | 12.000740 s |
+| Camera FPS | **0.333327**, 4 frames | **3.499784**, 42 frames |
+| Maximum camera receipt gap, including window edges | **9.471444 s** | **0.401551 s** |
+| Inspection Objects FPS | **0.249995** | **3.583112** |
+| A1 FPS | **0.249995** | **3.583112** |
+| Fresh selected fusion FPS | **0.249995** | **3.666440** |
+| Maximum valid fused-output gap, including window edges | **9.396370 s** | **0.398585 s** |
+| Maximum age over valid selected statuses | **0.480703 s** | **0.450133 s** |
+| STALE entries during measurement | **1**, plus initially MODEL_UNAVAILABLE | **0**, CONSENSUS throughout |
+| Zero commands | **YES** | **YES** |
+| Full stability acceptance | **FAIL** | **FAIL: rate below 4 Hz**, despite fresh cadence |
+
+Counter-based model FPS and unique fused-source FPS can differ by a window-boundary
+result. No threshold was relaxed to call B a pass. B did not reproduce the severe
+CAMERA_STALE gap, and shows that restart alone need not stop the camera. Since both
+miss full throughput acceptance, these two runs do not establish a fully exclusive
+binary root cause or reproduce the prior fixed diagnostic's 4.667 Hz performance.
+The strongest causal evidence is that restart is **not necessary** for the severe
+failure, whereas free-body operation plus drift changes the native rendering path.
+
+A's zero-command startup-to-end drift: world displacement
+**[+0.02752617,+0.00008646,-2.54762602] m**, initial
+[-15.99999549,0.79999999,2.99994868], final
+[-15.97246931,0.80008646,0.45232266] m. Body-lateral projection
+-0.00008646 m; 1158 evaluation samples. This includes model warmup plus measurement,
+not just the 12 s window. Buoyancy therefore moved the free vehicle substantially
+without a motion command. B drift was exactly zero. Do not state that A's physical
+vehicle remained stationary merely because its commands were zero.
+
+### Camera and nonvisual lifecycle
+
+All times below are UTC for process start; topic/image delays are steady-clock
+seconds from the corresponding Popen call, so wall-clock adjustments cannot distort
+the intervals. Process PID and /proc birth ticks and DDS image-publisher GIDs are
+retained in result.json.
+
+| Stage | Process start UTC | PID / birth ticks | New image-topic publisher delay | First image delay |
+| --- | --- | --- | --- | --- |
+| A direct dynamic | 18:13:38.405046 | 17734 / 2233745 | 1.658677 s | 2.978920 s |
+| B initial fixed | 18:15:01.535448 | 17916 / 2242237 | 1.239133 s | 2.445348 s |
+| B restarted fixed | 18:16:39.899912 | 18035 / 2252310 | 2.036272 s | 2.284992 s |
+
+First five image receipt intervals:
+
+- A: [0.354412,0.450029,0.412937,0.270288,0.311944] s.
+- B initial: [0.331428,0.247366,0.268013,0.265942,0.261500] s.
+- B restarted: [0.510342,0.270462,0.276912,0.270483,0.273117] s.
+  The initial >0.5 s restart interval belongs to startup, not its clean window.
+
+Image and CameraInfo moved together: A **4/4** during its window; B **42/42**.
+CameraInfo did not keep arriving through the Image blackout. The native bridge
+publishes the pair in one ColorCameraImageReady callback, consistent with a vision
+render/readback/delivery-path gap rather than just loss of one ROS topic.
+
+| Nonvisual stream | A FPS / max receipt gap | B FPS / max receipt gap |
+| --- | --- | --- |
+| IMU | 18.916320 / 0.698426 s | 19.915438 / 0.052734 s |
+| DVL | 18.916320 / 0.698461 s | 19.915438 / 0.052492 s |
+| Pressure | 4.749913 / 0.840739 s | 4.999692 / 0.205276 s |
+| Evaluation odometry | 28.332815 / 0.688636 s | 29.998150 / 0.041711 s |
+
+Nonvisual streams continued through A's much longer vision gap, with their own
+smaller timing jitter. This is not a complete simulator/ROS bridge outage. `/clock`
+had **zero messages in both**; this original native build provides wall-clock
+stamps and does not publish /clock. Its absence is not evidence of a clock-topic
+stall. No simulated-time or timestamp override was introduced.
+
+### Process, service and health-gate findings
+
+- Successful prior fixed diagnostic: one fixed simulator, model warmup, no restart.
+- A: one dynamic simulator, then the same observer/zero-control processes; model
+  runtime warmup and advancing source checks; no fixed warmup instance.
+- B: initial fixed simulator and stable selected outputs; stop only the owned old
+  simulator; retain observers/adapter/controller; relaunch fixed simulator with
+  identical XML/settings. No service discovery, respawn or enable calls.
+- Prior failed calibration: fixed warmup, stop owned simulator, edit temporary
+  body fixed=false, start adapter, relaunch dynamic simulator, qualify observations.
+  Unlike these experiments, it did not start the controller before calibration.
+- Performance XML excludes auxiliary cameras/FLS and removes retained scalar
+  sensor-enable service declarations. Inspection already has no enable service.
+  Sensors start enabled for **each new process**, not through presumed persistence.
+- B old PID exited cleanly (**0**) before Popen of the new PID. Image graph was
+  already **empty immediately after stop**. Old GID
+  010f7d17fc453e2b0000000000001c03 changed to
+  010f7d1773461ea80000000000001c03. No old publisher remained to satisfy a topic
+  health gate. The diagnostic requires a new GID, a live owned process, and image
+  stamps newer than that process's start before considering its frames.
+- B checked current-source detector completions after restart, rather than
+  accepting the observers' old runtime/READY metadata. Source stamps advanced.
+  This is useful health instrumentation, not proof of a restart defect.
+
+The initial B warmup flag in the recorded artifact is false despite warm models
+and later stable fixed selection. The diagnostic's first implementation demanded
+that **every historical** source timestamp increase. Four ~0.22–0.35 s backward
+stamp steps during its initial ~100 s startup/wait made that check permanently
+false. The late fixed-source check succeeded, then B restarted as requested.
+The helper now requires the **latest six consecutive advancing stamps**, permitting
+health recovery after an old clock step. This correction was unit-tested after the
+two runs; neither experiment was repeated. It does not explain A's independently
+measured 9.47 s raw receipt gap (A recorded no source-stamp regression), or change
+B's measured throughput failure. No freshness threshold or STALE handling changed.
+
+### Result, scope and validation
+
+No operational smoke-runner fix was applied: direct dynamic startup **did not
+work**, so replacing the existing restart path would not fix the demonstrated
+failure. No post-fix dynamic validation ran because no applicable runtime fix was
+established; user policy requires stopping on dynamic-path failure. A final sign
+calibration is **not justified**. P5a remains blocked; no pulse in this task.
+
+This turn changed only: new scripts/perception_p5a_lifecycle.py,
+scripts/run_p5a_lifecycle.sh and scripts/test_p5a_lifecycle.py;
+neptune_evaluation/lateral_motion.py and its test (armed startup origin and receipt
+telemetry); docs/PROJECT_HANDOFF.md and docs/PERCEPTION_INTEGRATION.md. The existing
+P5a smoke scripts, model/controller algorithms, 0.5 s freshness, optics, thruster
+allocation, mission and state estimation are unchanged in this turn.
+
+Focused evaluation tests initially **3 passed in 0.20 s**, then lifecycle/evaluation
+checks **5 passed in 0.12 s**; initial combined collection failed because the test
+PYTHONPATH omitted neptune_perception (the shared cleanup helper imports it).
+Adding that existing package path fixed collection. A floating-point interval
+assertion uses numeric tolerance. New evaluation-file lint passes. Relevant
+neptune_evaluation build: **1 package passed, 1.29 s**. Python syntax, runner Bash
+syntax and diff checks pass. No simulator/model/controller package rebuild needed.
+
+Evidence: container `/tmp/neptune-p5a-lifecycle-A-_nt5uutp/result.json` and
+`/tmp/neptune-p5a-lifecycle-B-e4tcsr1l/result.json`, with exact source/receipt times,
+process identities, GUIDs and logs. Host `/tmp/neptune-p5a-lifecycle-{A,B}-result.json`
+and corresponding `-output.txt`. All owned processes exited, final process audit
+found none in domain 87, and inference stopped. These files are temporary.
+**Commands remained zero; A passively drifted. Freshness remains 0.5 s. Ground truth
+is evaluation-only. P5b NOT STARTED. No commit or push occurred.**
+
+
+## P5a startup-settling validation — physical settling confirmed, P5a BLOCKED
+
+**One fresh dynamic run only, no restart or repeat. P5a remains BLOCKED.** Girona
+naturally passed the physical depth-rate/yaw-rate gate at **37.676355 s**, but no
+simultaneous physical/perception window passed by the **40 s** deadline. Commands
+remained all zero; sign calibration and closed-loop alignment were not started.
+This narrows the earlier A/B interpretation: startup strongly worsens camera gaps,
+but this run still did not produce an acceptable settled pipe-centering input.
+It does not prove a generic native dynamic-physics defect. No Stonefish patch,
+model/controller change, stabilizing controller, P5b work, commit or push.
+Stage 2 remains frozen through S2.6.
+
+### Single-run method and gate
+
+Same real seven-motor free Girona, temporary initial pose (-16,+0.8,3), yaw pi,
+P3 performance profile **320x240/80 degrees**, software/eight workers/160x120/low,
+100 Hz physics, both independent models, P4c fusion and seven-motor adapter.
+A single zero-only publisher owned /neptune/cmd_body during diagnosis. No autonomy,
+heading/depth controller, respawn/enable call or simulator restart. Alignment was
+conditionally permitted only after settling and successful sign calibration; the
+code never reached either motion phase in this actual run.
+
+The settling timer starts immediately before the one simulator Popen. The first
+20 s are recorded as startup, not evaluated against P5a acceptance. The earliest
+eligible five-second window is [20,25] s. Check subsequent rolling five-second
+windows until 40 s, using **onboard sensor data**, never evaluation odometry:
+
+- Depth = pressure/(997*9.81)+0.40, the existing validated pressure_depth formula.
+- Depth rate = successive pressure-derived depths divided by original source-stamp
+  difference; nonpositive or >=1 s source intervals produce an invalid rate and
+  cannot qualify a window. No interpolation hides a bad time interval.
+- Yaw/angular velocity come from the existing identity-mounted IMU. Body gyro-Z is
+  the near-level yaw-rate equivalent used for this diagnostic; other rate axes and
+  yaw are also recorded. IMU quaternion yaw uses the existing ROS convention.
+- **Every** pressure-rate sample in the same five-second window must satisfy
+  abs(rate)<**0.05 m/s**; every gyro-Z sample abs(rate)<**0.03 rad/s**. Both physical
+  streams must cover the window with receipt gaps <0.5 s.
+- The same window also needs camera and distinct fresh selected fusion output
+  >=**4 Hz**, gaps <**0.5 s**, selected age <**0.5 s**, valid target throughout,
+  >=5 distinct consecutive fresh targets, no CAMERA_STALE, and both models warmed.
+
+Pressure's constant mounting offset is the existing simple calibration, not a new
+attitude-dependent transform. Depth rate is the closest validated sensor-derived
+vertical-rate signal; no truth velocity or depth enters motion qualification.
+Truth depth/yaw/linear/angular velocities and source/receipt timestamps are
+continuously recorded inside neptune_evaluation and read only for the final report.
+
+### Actual startup and settled results
+
+The full settling attempt ended at **40.001455 s** (normal loop scheduling rounding).
+The physical five-second gate first passed at **37.676355 s**, verifying the
+window **32.676355–37.676355 s**. The reported transition boundary is the start of
+that verified window, not an assertion of an instantaneous physical equilibrium.
+Onboard depth initially **3.007965 m**, final **0.447589 m**; the first physically
+settled window ranged **0.439735–0.487929 m**. Evaluation-only truth was initially
+2.999949 m and finally 0.442264 m, confirming passive buoyant rise. World displacement
+approximately [0.02676104,0.00008876,-2.55768453] m; no commanded motion.
+
+| Diagnostic interval | Startup/unsettled | From first verified physical-window start to deadline |
+| --- | --- | --- |
+| Time bounds | 0–32.676355 s | 32.676355–40.001455 s |
+| Duration | **32.676355 s** | **7.325099 s** |
+| Camera FPS | **2.846095** | **3.549440** |
+| Maximum camera receipt gap, including edges | **6.580135 s** | **0.707956 s** |
+| Distinct fresh selected fusion FPS | **0.612063** | **0** |
+| Maximum valid selected-output gap, including edges | **18.280804 s** | **7.325099 s** (none selected) |
+| Onboard depth range | **0.402974–3.007965 m** | **0.439735–0.487929 m** |
+| Depth-rate range | **-0.134428–+0.090897 m/s** | **-0.037598–+0.046249 m/s** |
+| IMU yaw-rate range | **-3.10977e-5–+1.87201e-5 rad/s** | **-1.02873e-5–+1.04009e-5 rad/s** |
+| Fused STALE entries | **3** | **4** |
+| Maximum valid selected-target age | **0.355678 s** | **unavailable: no valid selected target** |
+
+The **exact first five-second physical settling window** had camera **3.8 Hz**,
+max camera gap **0.439493 s**, selected fusion **0 Hz**, max selected gap **5 s**;
+fusion alternated AMBIGUOUS and STALE (three/two entries). Thus even at physical
+qualification, the camera rate missed 4 Hz and association supplied no valid target.
+
+The final five seconds [35.001455,40.001455] remained physically qualified:
+depth rate -0.035954–+0.029697 m/s, gyro-Z -1.02873e-5–+7.20943e-6 rad/s. Camera
+was **3.4 Hz**, max gap **0.707956 s**, selected fusion **0 Hz**, with three AMBIGUOUS
+and three STALE entries. No later common gate passed. The entire run's IMU X/Y rate
+ranges were approximately [-0.000497,+0.000423] and [-0.037416,+0.042480] rad/s;
+these other axes were recorded, not used to add an unrequested attitude hold.
+Initial IMU yaw was approximately -pi (equivalent to yaw pi).
+
+Physical settling therefore **does occur**, and removes most of the large startup
+camera gap. It does **not fully explain or resolve** the P5a failure: after settling,
+camera throughput remains below 4 Hz, a >0.5 s camera gap remains, and selected-target
+association is ambiguous/stale. The vehicle has risen far from its original
+inspection depth; changing view and target geometry remain material limitations,
+not proof that the model itself is slow or that a native patch is needed.
+The exact blocker is **no simultaneous five-second physical and fresh-valid-target
+window before 40 s**. Physical instability is not the blocker at the end of this run.
+
+### Scope, validation and evidence
+
+Actual CameraInfo remains native: 320x240, fx=fy=190.6805748150736, cx=160, cy=120.
+Continuous records include 184 pressure samples, 739 IMU and 739 DVL publications,
+119 paired Image/CameraInfo publications, fused and per-model statuses, all commands,
+and 1109 odometry samples kept in evaluation. Camera source stamps and receipts,
+IMU yaw/all angular axes, DVL raw velocity and pressure-rate histories are retained.
+No selected-target age after settling is fabricated from an invalid retained bbox.
+
+Changes this turn: new scripts/perception_p5a_settling.py,
+scripts/run_p5a_settling.sh, scripts/test_p5a_settling.py; added continuous snapshot
+history to neptune_evaluation/lateral_motion.py and a focused test;
+docs/PROJECT_HANDOFF.md and docs/PERCEPTION_INTEGRATION.md. All previous diagnostic
+scripts, profile settings, estimator/controller/model algorithms and allocation
+remain unchanged. No depth/heading stabilization was added.
+
+- Initial focused settling/evaluation tests: **8 passed in 0.22 s**; final snapshot
+  coverage: **9 passed in 0.17 s**. Covers continuous physical windows, strict rate
+  boundaries, missing derivatives, sensor gaps, invalid watchdog repeats, camera
+  gaps, age==0.5 rejection, CAMERA_STALE and no-target rejection.
+- Relevant neptune_evaluation build: **1 package passed, 1.41 s**. New evaluation
+  file lint passed; harness Python/Bash syntax and diff checks passed.
+- Live evidence: container `/tmp/neptune-p5a-settling-fv9g5ezf/result.json`, simulator
+  and observation logs. Host `/tmp/neptune-p5a-settling-result.json` and
+  `/tmp/neptune-p5a-settling-output.txt`. Raw state and timing history is temporary.
+- Owned processes exited, process list clear and owned inference stopped. No repeat.
+
+**No sign pulse, experimental sign or closed-loop result exists for this run.**
+Configured sign remains 0 (disabled); existing Kp0.5/max0.25/deadband0.05/freshness0.5/
+three-source confirmation/20 Hz parameters remain unchanged. **Freshness stayed
+0.5 s. Pipe-angle/yaw alignment unimplemented. P5b NOT STARTED. No commit/push.**
+
+
+## Demo V0 — full movement validated; implementation and smoke history (2026-10-14)
+
+**Graphics/runtime is frozen. No more graphics experimentation is required.**
+G1/G2/G3 supersede the historical D3D12-unusable conclusions above. No driver,
+Mesa, WSL, native Stonefish, camera-readback or scheduling patch was applied.
+
+| Valid graphics trial | Camera frames / window | Hz | Max receipt / source gap |
+| --- | --- | --- | --- |
+| G1 reduced fixed fixture, 160x120 LOW preview | 199 / 20 s | 9.950 | 0.191531 / 0.191456 s |
+| G2 dynamic integrated scene, 1280x720 LOW | 301 / 30 s | 10.033 | 0.170690 / 0.172902 s |
+| G3 same dynamic scene plus both CUDA models | 302 / 30 s | 10.067 | 0.172283 / 0.177261 s |
+
+G2/G3 camera: 320x240, 80-degree HFOV, configured 10 Hz. G1 used the retained
+145-degree reduced fixture. Image/CameraInfo pairs all matched. G3 independently
+recorded 238 CUDAExecutionProvider node events per model, 302 warm completions
+per model, zero warm stale completions/replacements, 31.8% average GPU utilization
+(22–54%), ~1791 MiB VRAM of 12282 MiB. G2 operator visual classification was smooth;
+G3 camera/model/resource coexistence passed. This is bounded runtime evidence, not
+model accuracy, long-duration reliability or a reason to change graphics settings.
+
+### Demo architecture and ownership
+
+`neptune_bringup/perception_demo.launch.py` owns one Stonefish process, the existing
+seven-motor adapter, existing `pressure_depth` and `dead_reckoning_state`, existing
+`mission_executive`, new `demo_readiness`, read-only `demo_gui`, and existing camera
+static-TF edges. It generates the same reduced integrated scene with the existing
+`neptune_sim.perception_profile.write_performance_scenario` helper; no prior /tmp
+benchmark fixture is required. Original Girona body/physics, seven actuators,
+lamps, pipe/flange/valve and scalar sensors are retained. Auxiliary RGB/FLS are
+removed only from generated XML. Original scenes and P5a profile helper are unchanged.
+
+Frozen DEMO defaults: accelerated NVIDIA D3D12 / OpenGL 4.6, RTX 4080 Laptop GPU,
+1280x720 LOW, 100 Hz physics, inspection RGB 320x240/80 degrees/10 Hz. The launch
+prepends `/usr/lib/wsl/lib` while retaining sourced ROS/Stonefish library paths,
+unsets software/GL overrides and checks the hardware renderer before movement.
+It does not maximize Stonefish. Windows can retain presentation-window state;
+keep Stonefish restored/unmaximized at 1280x720. The native scene render target
+remains the requested 1280x720. The prior larger client size corresponds to actual
+WM maximization (MAXIMIZED_HORZ/VERT were observed during G3 cold loading).
+
+Explicit legacy profiles remain available without changes:
+`neptune_sim/perception_performance.launch.py` is the small-window software profile;
+`perception_camera.launch.py` is the ordinary 640x480/145-degree camera profile.
+They are not the default Demo V0 entrypoint. No 1600x900 trial ran.
+
+Movement authority is exclusively `mission_executive` -> `/neptune/cmd_body` ->
+`stonefish_vehicle_adapter` -> `/sim/thruster_setpoints` (seven values).
+The executive already contains the proven depth PID, heading control and waypoint
+guidance; standalone `depth_hold`/`waypoint_hold` are deliberately not co-launched.
+No new motion controller, command mux or GUI command publisher exists.
+`/state/odometry` remains the sole downstream state interface. No demo component
+consumes `/sim/odometry`; it remains evaluation-only.
+
+Demo readiness is opt-in in the existing executive (`demo_mode=false` preserves
+ordinary Stage 1 startup). Demo starts in INITIALIZING with zero commands, waits
+at least 15 s from initial sensor arrival plus a three-second stable window:
+pressure-derived depth rate <0.05 m/s and IMU angular-Z <0.03 rad/s, with fresh,
+finite advancing pressure/IMU/DVL/onboard-state streams (<0.5 s gaps/ages).
+Readiness also requires exclusive executive/adapter/estimator publisher ownership.
+After initial qualification, motion is allowed and only validity/freshness are
+required; a moving robot is not incorrectly required to remain stationary.
+Readiness/state loss pauses the executive at zero without resetting HOME or mission
+phase. Duplicate publishers abort the launch. Startup has a 90 s failure deadline.
+Neural health and camera detections never gate or command movement.
+
+The executive publishes status on transitions and at 5 Hz. COMPLETE distinguishes
+normal completion from the existing 420 s mission TIMEOUT; elapsed time freezes
+on completion. Guidance, controller gains, route, standoff and mission transitions
+are unchanged. Default automatic startup needs no button or extra terminal.
+Closing the GUI/simulator or any required process exits the whole owned launch.
+
+### GUI and teammate audit
+
+Audited all 487 lines of `lumyn/Perception:src/neptune_gui/auv_gui.py`, its
+`controls.py` and GUI runner at donor SHA
+`608a3b985b8c5dbfc56f5398b8679c8038861bbe`. Reused the charcoal/cyan styling idea,
+large-camera/sidebar hierarchy and background-I/O/UI separation. Donor TCP,
+manual keyboard controls, native thrusters, mission buttons, truth comparisons
+and perception-dependent movement were not copied.
+
+The dev container already has OpenCV Qt5 support; Tk/PyQt bindings/Pillow are not
+installed there. V0 uses the existing OpenCV native display, avoiding new packages.
+A separate ROS thread only stores the latest Image and lightweight telemetry.
+Decode/resize/display happen on the GUI thread, in its own process. BEST_EFFORT
+KEEP_LAST depth-one camera input cannot build a backlog or backpressure Stonefish.
+
+Application topics consumed by GUI:
+
+- `/neptune/camera/inspection/image_color` — Image, latest native RGB frame.
+- `/neptune/camera/inspection/camera_info` — CameraInfo.
+- `/state/odometry` — pressure/IMU/DVL-derived depth, x/y and heading.
+- `/neptune/mission/status` — String JSON, authoritative phase/time/outcome.
+- `/neptune/demo/health` — String JSON, readiness and sensor/publisher health.
+
+**GUI application topics published: NONE.** ROS's standard `/rosout` and
+`/parameter_events` remain enabled; neither is a movement interface. No motor
+arrays, Twist, start service call, fake detections or neural overlays originate
+from the GUI. It displays PERCEPTION: DISABLED. “Onboard state LIVE” means fresh
+sensor-derived telemetry, not validated covariance or an ESKF accuracy claim.
+Readiness publishes only `/neptune/demo/ready` (Bool) and `/neptune/demo/health`.
+The executive's optional `/neptune/mission/start` Trigger arms a ready demo when
+`auto_start=false`; it is for controlled validation, not GUI driving.
+
+### Build and one-command startup
+
+Inside the existing dev container, source ROS and Stonefish, then build only the
+Python demo/runtime packages (no native or Docker rebuild):
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /opt/stonefish_ws/install/setup.bash
+cd /workspace
+colcon --log-base /tmp/neptune-demo-v0-log build \
+  --build-base /tmp/neptune-demo-v0-build \
+  --install-base /tmp/neptune-demo-v0-install \
+  --packages-select neptune_sim neptune_vehicle neptune_state_estimation \
+                    neptune_autonomy neptune_bringup
+```
+
+From the repository root in WSL, the obvious entrypoint is:
+
+```bash
+./scripts/run_demo_v0.sh
+```
+
+It reuses/starts only the existing Compose dev container, sources ROS/Stonefish
+and the built demo overlay, selects ROS domain 92 by default, and starts the entire
+stack. No inference service is started. Override ROS_DOMAIN_ID explicitly if needed;
+use the same domain for observers. The runner selects a normal `/workspace/install`
+demo installation first, otherwise the validated temporary install. An explicit
+`NEPTUNE_DEMO_INSTALL` selects another existing build. To make the build persistent,
+use normal workspace build/install directories instead of the /tmp build arguments.
+No build happens implicitly during the startup command.
+
+Equivalent single sourced-container ROS command:
+
+```bash
+source /tmp/neptune-demo-v0-install/setup.bash
+ROS_DOMAIN_ID=92 ros2 launch neptune_bringup perception_demo.launch.py \
+  simulation_data:=/workspace/external/stonefish/Tests/Data
+```
+
+Close the GUI/Stonefish window or Ctrl+C the launch to stop only its owned actors;
+the dev container remains intact. For diagnostic screenshots, optionally pass
+`evidence_directory:=/tmp/my-neptune-demo` (GUI screenshots and health JSON).
+`auto_start:=false` is a validation option: initialization remains at zero until
+the executive's Trigger service is called after health checks. No simulator restart.
+
+### Earlier instrumented smoke validation (historical scope)
+
+This section records the earlier stopped smoke run only. Its completion deferral
+is superseded by the user manual full-movement validation recorded below; its
+measurements and temporary evidence are retained unchanged.
+
+Initial verification passed before arming the same simulator: live GUI frames and
+onboard telemetry, stable readiness, one executive command publisher, one
+seven-motor adapter publisher, one sensor-derived estimator, no neural/fusion/P5a
+publishers, all 441 observed startup body commands zero. The operator supplied a
+screenshot and confirmed **“ITS WORKING!”**. Stonefish was observed restored at
+1280x720, LOW, accelerated D3D12; no automatic maximization code exists.
+
+One mission was armed. Observed sequence:
+**INITIALIZING -> WAIT_FOR_STATE -> DIVE -> TRANSIT**. The operator then changed
+validation scope to a short demonstration and requested no full mission. We
+stopped the owned launch immediately; no retry, simulator restart or second mission.
+**Full mission result: NOT RUN TO COMPLETION AT OPERATOR REQUEST**, not a failed
+mission or a claim of INSPECT/RETURN/ASCEND/COMPLETE.
+
+| Short-smoke measurement | Actual result |
+| --- | --- |
+| First 30 s after DIVE began | 301 Images / 30 s = **10.033 Hz** |
+| Image/CameraInfo pairing | **301/301** |
+| Max receipt gap, including window edges | **0.138572 s** |
+| Max source-stamp gap | **0.138693 s** |
+| Full observed movement interval | ~113.15 s; 1135 Images, **10.031 Hz** |
+| Full observed interval max receipt / source gap | **0.141199 / 0.188320 s** |
+| Last reported mission elapsed / state | **113.476 s / TRANSIT** |
+| Final estimated position | **(-17.6972, +0.0640, 2.9915) m** |
+| GUI at shutdown | camera/state LIVE; 1256 frames displayed / 1257 received |
+| Largest GUI display gap | **0.166251 s** |
+| Seven-motor layout | every array length 7; channels 4/5/6 always zero |
+| Final motor command | seven zeros |
+
+Depth reached the existing 3 m target; lateral estimate reached ~0.357 m during
+outbound motion and reduced to ~0.064 m. No lateral-thruster regression was observed.
+No truth data entered readiness, GUI, mission or evaluation observer. Localization
+is the existing clean dead-reckoning baseline; no long-duration/real-ocean claim.
+Inference, P4c fusion and P5a stayed off throughout. Mission executive was the
+only body-command publisher. Camera, GUI and telemetry remained live during the
+observed movement; full mission/inspection/return behavior is deferred, not inferred.
+
+Original full-mission temporary observer recorded FAIL on intentional launch exit
+because it expected COMPLETE. Its raw result is retained; `assessment.json` explains
+the user-directed stop and records the accepted short-smoke scope explicitly.
+
+Shutdown exposed the pre-existing unconditional `pressure_depth` rclpy.shutdown()
+after ROS's SIGINT handler had already closed the context (that component exit 1).
+Added only an `if rclpy.ok()` shutdown guard; estimator math/input/output unchanged.
+The other launch components stopped cleanly; adapter emitted seven zeros. Both
+signal/context paths have regression tests, and an independently launched installed
+pressure_depth process now exits **0** on SIGINT with no traceback. No extra simulator
+or mission was run after this fix; full-stack post-fix shutdown was not rerun.
+
+Validation: initial focused suite **12 passed**, expanded preservation suite
+**30 passed**, final shutdown regression/preservation suite **32 passed in 0.61 s**.
+Includes startup/arming/health expiry/invalid state, unchanged Stage 1 gains and
+startup, GUI no application publishers/latest-slot/stride/color decoding, all 17
+existing five/seven-motor adapter tests, and the existing profile preservation test.
+Five Python ROS packages built successfully (**2.63 s**); subsequent autonomy
+and estimation builds passed after final lifecycle updates. Expected installed
+Stonefish dependency and disabled-bytecode warnings were nonfatal. Host runner
+Bash syntax, installed imports, ROS launch --show-args, actual host runner
+--show-args, and git diff --check passed. No native/image/package installation.
+
+Evidence (temporary, copy before container replacement):
+container and host `/tmp/neptune-demo-v0-validation-49fzqeje/` contain raw
+`result.json`, explanatory `assessment.json`, `launch.log`, GUI health and images.
+GUI screenshots: `gui/INITIALIZING.png`, `gui/INITIALIZING-live.png`, `gui/DIVE.png`,
+`gui/TRANSIT.png`. Host `/tmp/neptune-demo-v0-visual/initialization-desktop.png`
+(operator screenshot) and `transit-desktop.png` show native windows. Inspection,
+return and completion images were not captured because those phases were not run.
+
+Known visual issues: native OpenCV viewer toolbar/status chrome remains; the
+320x240 camera is enlarged for presentation, so detail is intentionally soft.
+The first camera view includes the existing dock/buoy; target-facing camera/fixture
+framing and lamp appearance at INSPECT were not reviewed in this shortened run.
+The free Stonefish trackball does not automatically follow the vehicle; its built-in
+Trackball center selector can be used observationally. Overlapping OS windows need
+normal desktop arrangement; leave Stonefish unmaximized. No scene/lighting/optics
+redesign, 1600x900 trial or repeated mission was performed.
+
+**P5a: IMPLEMENTED — LIVE CLOSED-LOOP VALIDATION DEFERRED.** All prior P5a source,
+configuration, sign=0, tests and diagnostic scripts were preserved byte-for-byte.
+P5b NOT STARTED. Next, only when assigned: correct and visually validate camera/light
+mounting orientation before Demo V1 Inspection Objects/A1 passive GUI overlays
+or renewed P5 sign calibration and lateral visual alignment. Neither phase is implemented here. Stage 2 frozen through S2.6.
+**No commit or push occurred.**
+
+
+### Demo V0 full movement — user manual validation (2026-10-14)
+
+**MAJOR MOVEMENT/INTEGRATION PASS — FULL MOVEMENT MISSION VALIDATED.**
+The user manually validated Demo V0 using:
+
+```bash
+./scripts/run_demo_v0.sh
+```
+
+The user observed one Stonefish simulator process, D3D12 hardware rendering on
+RTX 4080, the 1280x720 LOW viewport, live inspection camera in the GUI, canonical
+state estimation, mission executive, seven-motor adapter, GUI telemetry, and the
+full autonomous movement mission. The successful flow was:
+
+**INITIALIZING -> WAIT_FOR_STATE -> DIVE -> TRANSIT -> INSPECT -> RETURN ->
+ASCEND -> COMPLETE.**
+
+This manual full-movement result supersedes the earlier short-smoke-only status.
+The quantitative camera measurements, elapsed time and final position above belong
+only to the earlier instrumented smoke run; no new full-run duration, final position
+or quantitative camera metrics were supplied. This documentation update did not
+rerun the mission, tests or builds.
+
+The frozen runtime remains D3D12 / NVIDIA GeForce RTX 4080 Laptop GPU,
+1280x720 LOW Stonefish viewport, inspection RGB 320x240 / 80-degree HFOV /
+configured 10 Hz. Graphics plus CUDA inference coexistence was proven separately
+in G3; that result does not imply inference was enabled in Demo V0.
+
+#### Known inspection camera/light orientation issue
+
+During the full run, the user visually identified that the inspection camera
+appears to face AFT/backward relative to the intended inspection direction.
+Inspection lights also appear backward or may share the same incorrect
+mounting-frame convention. The current hypothesis is a **local sensor/light
+mounting-transform problem**, likely an orientation convention or 180-degree
+transform issue. **The exact transform and cause are not yet proven.**
+
+This issue did not prevent mission motion, state estimation, GUI operation,
+camera streaming, D3D12 rendering, seven-thruster integration or completion of
+the movement demo. It must be corrected before meaningful inspection-camera
+visual validation, Demo V1 passive perception overlays, or renewed P5a
+perception-driven alignment validation.
+
+| Current status | Result |
+| --- | --- |
+| Demo V0 | **FULL MOVEMENT MISSION VALIDATED** |
+| Graphics | **VALIDATED** |
+| GUI | **WORKING** |
+| Inspection camera stream | **WORKING** |
+| Inspection camera mounting orientation | **KNOWN ISSUE — appears backward** |
+| Inspection lights orientation | **KNOWN ISSUE — appears backward / requires verification** |
+| P5a | **IMPLEMENTED — LIVE CLOSED-LOOP VALIDATION DEFERRED** |
+| P5b | **NOT STARTED** |
+| Demo V1 passive perception overlays | **NEXT AFTER CAMERA/LIGHT ORIENTATION FIX** |
+
+#### Immediate next session task — mounting orientation only
+
+Inspect and correct only:
+
+1. Girona body-frame convention.
+2. Inspection camera mounting transform.
+3. Inspection camera optical-frame transform.
+4. Inspection light mounting/orientation.
+
+Then run a **short visual validation** confirming that the camera faces forward
+toward the inspection asset, lights illuminate forward, and pipe/flange/valve are
+visible from the intended inspection approach. Do not change mission logic,
+state estimation, controllers, graphics runtime, P4 models, P5a or P5b.
+Demo V1 passive overlays follow only after this orientation fix. No part of that
+next task was started in this documentation-only update. P5a/P5b work is untouched;
+no code/config changes, tests, simulations, rebuilds, commits or pushes occurred.

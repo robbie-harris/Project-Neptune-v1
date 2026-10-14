@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>neptune_bringup</name>
+  <version>0.1.0</version>
+  <description>Integrated Neptune demo launch, readiness and read-only visualization.</description>
+  <maintainer email="neptune@example.com">Project Neptune</maintainer>
+  <license>MIT</license>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>stonefish_ros2</exec_depend>
+  <exec_depend>neptune_sim</exec_depend>
+  <exec_depend>neptune_autonomy</exec_depend>
+  <exec_depend>neptune_state_estimation</exec_depend>
+  <exec_depend>neptune_vehicle</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <test_depend>python3-pytest</test_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>
