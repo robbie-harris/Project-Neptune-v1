@@ -9,6 +9,9 @@ Project Neptune is a modular ROS 2 autonomy stack for underwater inspection. It 
 ## Demo V0
 
 **Current demonstrated mission**
+<p align="center">
+  <img src="image.png" alt="Project Neptune Demo" width="900">
+</p>
 
 `WAIT_FOR_STATE → DIVE → TRANSIT → INSPECT → RETURN → ASCEND → COMPLETE`
 
