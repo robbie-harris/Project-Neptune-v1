@@ -1,5 +1,8 @@
 """Regression checks for legacy and perception allocation and stop paths."""
 from types import SimpleNamespace
+from pathlib import Path
+import math
+import xml.etree.ElementTree as ET
 
 import pytest
 import rclpy
@@ -33,10 +36,10 @@ def vehicle(request, monkeypatch):
 
 
 @pytest.mark.parametrize('body,expected', [
-    ((0.4, 0.2, 0.3, 0.1), [0.3, 0.5, -0.3, -0.3, 0.2]),
+    ((0.4, 0.2, 0.3, 0.1), [-0.5, -0.3, -0.3, -0.3, 0.2]),
     ((0.0, -0.4, 0.0, 0.0), [0.0, 0.0, 0.0, 0.0, -0.4]),
-    ((0.8, 2.0, -2.0, 0.5), [0.3, 1.0, 1.0, 1.0, 1.0]),
-    ((-0.8, -2.0, 2.0, -0.5), [-0.3, -1.0, -1.0, -1.0, -1.0]),
+    ((0.8, 2.0, -2.0, 0.5), [-1.0, -0.3, 1.0, 1.0, 1.0]),
+    ((-0.8, -2.0, 2.0, -0.5), [1.0, 0.3, -1.0, -1.0, -1.0]),
 ])
 def test_body_mapping(vehicle, body, expected):
     node, sent = vehicle
@@ -49,14 +52,66 @@ def test_body_mapping(vehicle, body, expected):
         assert list(sent[-1][5:]) == [expected[4], expected[4]]
 
 
-def test_exact_historical_output(vehicle):
+def test_bounded_allocation_and_unchanged_heave_sway(vehicle):
     node, sent = vehicle
     for surge in (-2.0, -0.3, 0.0, 0.8, 2.0):
         for yaw in (-0.7, 0.0, 0.4):
             node.publish_thrusters(surge, 0.34, -0.25, yaw)
-            old = [adapter.clamp(surge-yaw), adapter.clamp(surge+yaw),
+            expected = [adapter.clamp(-surge-yaw), adapter.clamp(-surge+yaw),
                    adapter.clamp(-0.34), adapter.clamp(-0.34), adapter.clamp(-0.25)]
-            assert list(sent[-1][:5]) == old
+            assert list(sent[-1][:5]) == expected
+            assert all(abs(value) <= 1.0 for value in sent[-1])
+
+
+def surge_forces(setpoints):
+    """Static-water FD thrust from actual mounts, inversion and handedness.
+
+    Common positive density/diameter/rate factors are omitted; this checks
+    force and yaw signs, not dynamic displacement or rotor transients.
+    """
+    scene = Path(__file__).resolve().parents[2] / 'neptune_sim/scenarios'
+    robot = ET.parse(scene / 'neptune_girona_perception.scn').find('robot')
+    forces = []
+    for name, command in zip(('ThrusterSurgePort', 'ThrusterSurgeStarboard'), setpoints):
+        motor = robot.find(f"actuator[@name='{name}']")
+        r, p, y = map(float, motor.find('origin').get('rpy').split())
+        axis = (math.cos(y)*math.cos(p), math.sin(y)*math.cos(p), -math.sin(p))
+        assert axis == pytest.approx((1, 0, 0))
+        assert motor.find('thrust_model').get('type') == 'fluid_dynamics'
+        rotor = -command if motor.find('specs').get('inverted_setpoint') == 'true' else command
+        axial = rotor * abs(rotor)
+        if motor.find('propeller').get('right') != 'true':
+            axial = -axial
+        coefficient = motor.find('thrust_model/thrust_coeff')
+        axial *= float(coefficient.get('forward' if axial >= 0 else 'reverse'))
+        position = tuple(map(float, motor.find('origin').get('xyz').split()))
+        forces.append((position, tuple(axial*a for a in axis)))
+    return forces
+
+
+def test_positive_surge_propels_geometric_bow(vehicle):
+    node, sent = vehicle
+    node.publish_thrusters(0.2, 0.0, 0.0, 0.0)
+    assert all(force[0] > 0 for _, force in surge_forces(sent[-1][:2]))
+
+
+def test_pure_yaw_preserves_historical_allocation_and_moment(vehicle):
+    node, sent = vehicle
+    node.publish_thrusters(0.0, 0.0, 0.0, 0.1)
+    historical = [-0.1, 0.1]
+    assert list(sent[-1][:2]) == historical
+    forces = surge_forces(sent[-1][:2])
+    assert sum(force[0] for _, force in forces) == pytest.approx(0)
+    # r cross F: positive public yaw retains positive body-Z moment.
+    assert sum(pos[0]*force[1] - pos[1]*force[0] for pos, force in forces) > 0
+
+
+def test_unsaturated_mixed_surge_yaw_common_and_differential(vehicle):
+    node, sent = vehicle
+    node.publish_thrusters(0.3, 0.0, 0.0, 0.1)
+    port, starboard = sent[-1][:2]
+    assert (port + starboard)/2 == pytest.approx(-0.3)
+    assert (starboard - port)/2 == pytest.approx(0.1)
 
 
 def test_watchdog_stops_every_motor(vehicle, monkeypatch):

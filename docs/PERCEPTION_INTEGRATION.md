@@ -8,19 +8,18 @@ D3D12 / RTX 4080 Laptop GPU, dynamic seven-thruster Girona, 1280x720 LOW Stonefi
 viewport, inspection RGB 320x240/80-degree HFOV/configured 10 Hz. Graphics plus
 CUDA coexistence was proven separately in G3. GUI and camera stream are WORKING.
 
-**Known visual issue:** camera appears AFT/backward; inspection lights appear
-backward or share an incorrect mounting convention and require verification.
-A local mounting-transform/orientation-convention or 180-degree issue is suspected,
-not proven. Movement completion, state estimation, streaming, GUI, graphics and
-seven-thruster integration were successful despite this issue. Next: inspect/correct
-only Girona body-frame convention, camera mounting/optical-frame transforms and
-light mounting/orientation, then a short forward-facing asset/lighting visual check.
+**Demo V0 camera/light approach view corrected:** the installed demo travels
+body -X. Its generated camera and lamp mounts now face -X and sit beyond that
+end of the hull after a rotation-only check proved self-occlusion. The user
+confirmed the clear pipe/flange/valve view. Controls and pending bow-forward work
+are untouched. See the Demo-only visual correction record below for exact mounts,
+evidence and the remaining close-INSPECT framing/recording limitation.
 
 P0/P1/P2 scene/vehicle work and P4a/P4b/P4c implementations are preserved.
 **P5a IMPLEMENTED — LIVE CLOSED-LOOP VALIDATION DEFERRED.** Existing sign=0,
 controller/configuration/tests/diagnostic scripts are unchanged; historical
 calibration failures remain evidence. P5b NOT STARTED; Stage 2 frozen through S2.6.
-Demo V1 passive perception overlays are next **after camera/light orientation fix**;
+Demo V1 passive perception overlays are next **after bow-forward motion validation**;
 renewed P5a perception-driven alignment also requires that fix. Demo V0 starts no
 inference server, detectors, fusion or P5 controller. No next task is started here.
 
@@ -2494,46 +2493,576 @@ The frozen runtime remains D3D12 / NVIDIA GeForce RTX 4080 Laptop GPU,
 configured 10 Hz. Graphics plus CUDA inference coexistence was proven separately
 in G3; that result does not imply inference was enabled in Demo V0.
 
-#### Known inspection camera/light orientation issue
+#### Bow-forward surge / guidance correction (2026-10-19)
 
-During the full run, the user visually identified that the inspection camera
-appears to face AFT/backward relative to the intended inspection direction.
-Inspection lights also appear backward or may share the same incorrect
-mounting-frame convention. The current hypothesis is a **local sensor/light
-mounting-transform problem**, likely an orientation convention or 180-degree
-transform issue. **The exact transform and cause are not yet proven.**
+**IMPLEMENTED; STATIC TESTS AND PACKAGE BUILDS PASS; DYNAMIC VALIDATION INCOMPLETE.**
+The original camera/light mounting hypothesis is superseded by the source audit:
+Girona geometric bow is body +X, and the inspection camera and both inspection
+spotlights already point body +X. Camera XYZ (0.82,0,0.20), RPY (pi/2,0,pi/2),
+optical TF, and lamp XYZ (0.76,+/-0.24,0.5)/RPY (pi/2,0,pi/2) required **NO
+transform change**. Camera viewing and spotlight emission both use local +Z.
 
-This issue did not prevent mission motion, state estimation, GUI operation,
-camera streaming, D3D12 rendering, seven-thruster integration or completion of
-the movement demo. It must be corrected before meaningful inspection-camera
-visual validation, Demo V1 passive perception overlays, or renewed P5a
-perception-driven alignment validation.
+OLD convention: positive public surge produced physical sternward body -X
+propulsion. Adapter surge motors used [C(s-r), C(s+r)] with both native
+setpoints inverted; guidance compensated with wrap(waypoint_bearing - pi).
+The full movement mission recorded above validated that historical convention.
 
-| Current status | Result |
-| --- | --- |
-| Demo V0 | **FULL MOVEMENT MISSION VALIDATED** |
-| Graphics | **VALIDATED** |
-| GUI | **WORKING** |
-| Inspection camera stream | **WORKING** |
-| Inspection camera mounting orientation | **KNOWN ISSUE — appears backward** |
-| Inspection lights orientation | **KNOWN ISSUE — appears backward / requires verification** |
-| P5a | **IMPLEMENTED — LIVE CLOSED-LOOP VALIDATION DEFERRED** |
-| P5b | **NOT STARTED** |
-| Demo V1 passive perception overlays | **NEXT AFTER CAMERA/LIGHT ORIENTATION FIX** |
+NEW convention: positive public surge requests physical bow-forward body +X
+propulsion. Adapter now uses [C(-s-r), C(-s+r)]; guidance uses
+wrap(waypoint_bearing) directly. Only common surge changes sign; the differential
+yaw contribution is unchanged. Native inversion flags, propeller handedness,
+yaw gains/convention, lateral/heave mapping, estimator, mission waypoints,
+scene assets, graphics, GUI, P4 and P5 code/configuration remain unchanged.
+This is source/static force-sign evidence, not a dynamic acceptance claim.
 
-#### Immediate next session task — mounting orientation only
+Validation:
 
-Inspect and correct only:
+- Focused adapter/guidance tests: **28 passed**, host 0.54 s and dev container
+  0.48 s. Covers both motor counts, configured native inversion/handedness and
+  static-water axial force signs, unchanged pure-yaw setpoints/positive yaw
+  moment, mixed allocation/saturation, watchdog/shutdown, cardinal headings,
+  and turn-before-surge for a world -X waypoint. Initial sandbox run failed
+  on blocked DDS socket creation; rerunning outside the sandbox passed.
+- Built only neptune_vehicle and neptune_autonomy: **2 packages passed, 1.05 s**,
+  using /tmp/neptune-bow-{build,install,log}. Only disabled-bytecode warnings.
+- Short dynamic attempt used existing stonefish_simulator_nogpu, a temporary
+  integrated seven-thruster scene at (-5,0,3)/yaw 0 with vision/lights omitted
+  only in the test copy, and the corrected installed adapter. Simulator loaded
+  successfully. The temporary Python harness aborted during Twist serialization:
+  an integer zero failed geometry_msgs Vector3's PyFloat_Check assertion.
+  **No valid positive-surge displacement, bow vector or dot result was retained.**
+  This was a harness failure, not evidence of wrong physical motion/sign.
+- Stopped the sequence on that failure. Pure-yaw and short-guidance dynamic
+  checks were **NOT RUN**; no full mission, perception or P5 ran. Exact owned
+  simulator/adapter PIDs were identified in isolated ROS domain 96 and stopped;
+  both were verified absent. Evidence remains in container
+  /tmp/neptune-bow-live-zqjmm4k0/{surge-sim.log,surge-adapter.log,surge-world.scn,
+  surge-vehicle.scn}; the host harness is /tmp/neptune_bow_live.py. There is no
+  successful result.json because the native assertion aborted the interpreter.
+- git diff --check passed. Camera/light XML and TF launches are unchanged.
 
-1. Girona body-frame convention.
-2. Inspection camera mounting transform.
-3. Inspection camera optical-frame transform.
-4. Inspection light mounting/orientation.
+**Bow-forward convention is NOT dynamically validated and is not yet ready for
+full Demo V0 acceptance.** Next authorized validation must correct the temporary
+harness's Twist field types, then perform bounded positive surge, positive yaw,
+and short onboard-state guidance checks in that order, stopping on failure.
+Only after those pass should the user run full Demo V0 and visually confirm
+camera/lights naturally face the inspection approach. No commit/push occurred.
+Stage 2 remains frozen through S2.6; P5a remains deferred; P5b not started.
 
-Then run a **short visual validation** confirming that the camera faces forward
-toward the inspection asset, lights illuminate forward, and pipe/flange/valve are
-visible from the intended inspection approach. Do not change mission logic,
-state estimation, controllers, graphics runtime, P4 models, P5a or P5b.
-Demo V1 passive overlays follow only after this orientation fix. No part of that
-next task was started in this documentation-only update. P5a/P5b work is untouched;
-no code/config changes, tests, simulations, rebuilds, commits or pushes occurred.
+
+#### Demo V0 travel-facing camera/lights — visual correction (2026-10-19)
+
+**Demo-only camera/light mount correction implemented; short approach-view
+validation PASSED.** This record supersedes the earlier no-transform-change
+conclusion for the installed Demo V0 runtime. That runtime still uses body -X
+as effective forward travel. The pending bow-forward adapter/guidance source
+changes were preserved and were NOT rebuilt into the demo or reverted here.
+Do not substitute that separate control overlay and assume these demo mounts
+still match its opposite travel direction.
+
+Only `neptune_bringup/launch/perception_demo.launch.py` changes runtime mounts:
+it adjusts the temporary generated performance vehicle, leaving shared perception
+scenes/profiles, P4/P5 and general camera launch unchanged.
+
+| Demo mount | Old XYZ (m) | New XYZ (m) | Old RPY (rad) | New RPY (rad) |
+| --- | --- | --- | --- | --- |
+| Camera | (0.82,0,0.20) | (-0.97,0,0.20) | (pi/2,0,pi/2) | (pi/2,0,-pi/2) |
+| Port lamp | (0.76,-0.24,0.5) | (-0.91,-0.24,0.5) | (pi/2,0,pi/2) | (pi/2,0,-pi/2) |
+| Starboard lamp | (0.76,+0.24,0.5) | (-0.91,+0.24,0.5) | (pi/2,0,pi/2) | (pi/2,0,-pi/2) |
+
+A rotation-only check at unchanged positions showed the camera looking through
+the vehicle; the user independently observed the same obstruction. Segment/mesh
+intersection checks also found both old lamp-to-pipe rays passing through the
+lower hull. The necessary X relocation clears the vehicle: hull minimum X is
+-0.803 m; rear lateral rotor envelope reaches -0.95647 m. Lens X=-0.97 clears
+that envelope by 0.01353 m. New lamp rays toward the pipe have no hull intersection.
+Y/Z, light power/cone, camera optics/rate, vehicle physics and all controls remain
+unchanged. No mount support geometry or physical hardware clearance certification
+is claimed.
+
+Demo ROS TF: `base_link -> inspection_camera_link` translation changes from
+(0.82,0,0.20) to (-0.97,0,0.20), yaw from 0 to pi. The child link-to-optical
+rotation remains (pi/2,0,pi/2); its composed body-to-optical rotation becomes
+(pi/2,0,-pi/2), matching Stonefish. Optical +Z maps body -X, optical +X maps
+body -Y (image right), optical +Y maps body +Z (image down). Frame/topic names
+are unchanged; no image rotation/mirroring is applied.
+
+Validation: **3 focused tests passed** (generated XML preservation outside the
+three mounts, physical/TF axes, unchanged shared performance profile). Relevant
+**neptune_bringup build passed**, 0.73 s, using installed Stonefish; only expected
+overlay and disabled-bytecode warnings. `git diff --check` passed.
+
+Short visual runtime: original D3D12 / RTX 4080, 1280x720 LOW,
+320x240 / 80-degree HFOV / configured 10 Hz. A temporary test-only fixed fixture
+at (-17.5,0,3), yaw 0, views the unchanged asset at (-20,0,3.2), representing
+2.5 m body-origin approach standoff. `auto_start=false`; all observed body commands
+were zero. Approximately 25 s after Ready, then explicit shutdown; no full mission.
+Pipe, flange on the left, and valve/handwheel upright on the right are visible
+without vehicle occlusion. Both beams point into the same forward inspection
+region; daylight/Omni remain, so individual lamp contribution was not isolated.
+The user confirmed **"looks good now"**. Final GUI health: camera live, recent
+10.1766 Hz, 137 frames received/displayed, onboard state live, no camera error.
+Native Image/CameraInfo share `GIRONA500/inspection_camera_optical_frame`.
+
+Evidence: [clear camera](evidence/demo-v0-orientation/inspection-camera.png),
+[GUI first live frame](evidence/demo-v0-orientation/gui-camera.png),
+[rejected rotation-only view](evidence/demo-v0-orientation/rotation-only-obstructed.png),
+and [measurement summary](evidence/demo-v0-orientation/validation.json).
+Raw final logs/screenshots remain in container /tmp/neptune-demo-orientation-0yrr1x6c
+and host /tmp/neptune-orientation-final-evidence. The GUI first-frame screenshot
+shows 0 Hz before its rate window fills; the later health summary records live rate.
+
+**Orientation/occlusion is visually accepted for the approach. Polished full-mission
+recording readiness is not yet certified:** the final 1.5 m body-origin INSPECT
+standoff leaves about 0.53 m lens-to-pipe distance, so unchanged 80-degree optics
+will frame more tightly than this approach fixture and cannot show the separated
+flange/valve together at that distance. Full-mission motion and final framing were
+not rerun. No mission, surge/yaw, estimator, GUI, graphics, Stonefish, perception,
+P5a/P5b logic or settings changed. No commit or push occurred.
+
+
+#### Demo V0 inspection-light mounting polish (2026-10-19)
+
+Only the two generated Demo V0 inspection spotlights were raised. Camera placement,
+orientation, TF, optics and rate remain exactly as visually accepted above.
+
+| Light | Previous XYZ (m) | Final XYZ (m) |
+| --- | --- | --- |
+| InspectionLightPort | (-0.91,-0.24,0.50) | (-0.91,-0.24,0.22) |
+| InspectionLightStarboard | (-0.91,+0.24,0.50) | (-0.91,+0.24,0.22) |
+
+Both retain RPY (pi/2,0,-pi/2), body -X emission, 90-degree cone and radius
+0.015 m. At the user's subsequent request, illuminance increased modestly from
+800 to **1000 lux per spotlight (+25%)**. No other light was changed.
+With +Z down, the inspection pair now sits only 0.02 m below the camera rather
+than 0.30 m below it. X/Y did not need adjustment.
+
+Geometry checks: including lamp radius, each source is 0.092 m beyond the hull's
+minimum-X plane, 0.09069 m below/clear of the rear rotor's maximum-Z envelope,
+and 0.045 m behind the lens plane. Since both cones point -X away from that hull
+plane, the hull cannot occlude their forward rays. At the same 2.5 m body-origin
+approach fixture, pipe/flange/valve/handwheel centre rays are 8.61–38.48 degrees
+off axis, within the unchanged 45-degree half-cones. No support/housing geometry
+was added; this is simulator mount clearance, not hardware certification.
+
+Validation: **3 focused XML/config/TF preservation tests passed in 0.06 s**;
+**neptune_bringup build passed in 0.73 s**, with expected installed-Stonefish and
+disabled-bytecode warnings. `git diff --check` passed. A source-delta check
+confirmed the runtime change from the preceding accepted demo is exactly the
+lamp-only Z and illuminance overrides; camera and all other launch behavior
+are unchanged.
+
+One short near-inspection run checked the raised pair; after the additional
+brightness request, one further short check validated the final 1000-lux setting.
+Each used a temporary fixed fixture at (-17.5,0,3), yaw 0, auto_start=false,
+about 25 s after Ready, then stopped. Original D3D12/RTX 4080, 1280x720 LOW,
+320x240/80-degree/10 Hz camera settings were retained. No full mission or nonzero
+body command ran. Final camera view remains unobstructed, with lit pipe, flange
+and upright valve/handwheel and no obvious blown highlights (zero saturated-white
+pixels in the retained frame). Final GUI camera was live at 10.019 Hz recent
+rate, 129 frames received/displayed, onboard state live, no camera error.
+This is a short visual check, not a new timing-reliability acceptance run.
+
+**Remaining exterior issue — not fixed by moving the inspection pair:** the
+large bright orb visibly hanging below Girona is the original `Omni` light,
+XYZ (0,0,1.0), radius 0.1 m, illuminance 20000 lux. Its centre/size match the
+external screenshot; it is distinct from both inspection spotlights. It was
+left unchanged under the two-spotlights-only scope. Therefore a claim that no
+bright light remains below the vehicle would be incorrect. Daylight and Omni
+also remain part of the asset illumination; spotlight-only photometry was not run.
+
+Evidence: [external view showing remaining Omni orb](evidence/demo-v0-light-polish/external-view.png),
+[final onboard view](evidence/demo-v0-light-polish/inspection-camera.png),
+[clearance calculations](evidence/demo-v0-light-polish/clearance.json), and
+[validation/GUI health](evidence/demo-v0-light-polish/validation.json).
+Raw final evidence: container /tmp/neptune-demo-light-polish-upyox3gr and host
+/tmp/neptune-light-polish-final-evidence. Camera, mission/control conventions,
+estimator, scene geometry, graphics, GUI, perception and P5 were unchanged.
+All owned demo processes stopped. Existing uncommitted work was preserved.
+No full mission, commit or push occurred.
+
+
+#### Demo Polish 1 — product GUI and presentation profile (2026-10-19)
+
+Implemented in `neptune_bringup` using the existing **OpenCV HighGUI / Qt5**
+backend; no new GUI framework or dependency. The normal, resizable window uses
+`WINDOW_GUI_NORMAL`, removing the expanded image toolbar and pixel RGB readout.
+Dark navy/cyan styling, a camera-first layout (about 74% of usable content width),
+large mission state/depth, compact STATE/CAMERA health, secondary elapsed time,
+and one noninteractive mission progress rail replace the engineering-looking
+panel. WAIT_FOR_STATE shares INIT on the rail. Autonomy/live labels still reflect
+actual readiness and freshness; no detection output is fabricated.
+
+Camera display preserves exact **4:3** geometry, centered with dark letterboxing.
+Integral upscales use nearest-neighbor interpolation; fractional fits use cubic
+interpolation. Source remains **320x240, 80-degree HFOV, configured 10 Hz**.
+Canvas/layout respond to actual native client dimensions; minimum 720x540.
+Validated native client resizing to 800x600 and 1400x1000 while camera/state stayed
+live. Smaller layouts omit secondary position/heading. The minimum layout is
+usable, but full-size presentation is preferable for readable recording labels.
+
+GUI subscriptions are unchanged:
+`/neptune/camera/inspection/image_color`,
+`/neptune/camera/inspection/camera_info`, `/state/odometry`,
+`/neptune/mission/status`, `/neptune/demo/health`.
+The GUI publishes no control commands. Existing image/state/mission freshness
+rules and bounded latest-frame handling remain unchanged. Evidence output adds
+`latest.png` and actual window/image rectangle dimensions to GUI health.
+
+Launch profiles:
+
+- **Engineering:** `./scripts/run_demo_v0.sh` retains Stonefish **1280x720 LOW**,
+  D3D12/NVIDIA, physics 100 Hz and GUI default 1280x880. Sensors/control unchanged.
+- **Presentation:** `./scripts/run_demo_v0.sh --presentation`. On the current WSLg
+  host, existing Windows PowerShell/Win32 APIs read the primary display's usable
+  work area (DPI-aware physical pixels, taskbar excluded). The helper places
+  Neptune left and Stonefish right with equal outer bounds, 12-pixel outside
+  margins and 12-pixel gap; neither is maximized or permanently topmost.
+  Measured desktop 2560x1600, work area 2560x1540: GUI outer rectangle
+  **(12,12,1262,1516)**; Stonefish **(1286,12,1262,1516)**.
+  Initial main rendering/client size is **1246x1476** for both. This changes only
+  the main presentation windows, not the onboard sensor. The host runner passes
+  these dimensions through presentation-only environment variables.
+- If Windows interop is unavailable, the launch uses existing X11 desktop sizing
+  with conservative dimensions (current 2560x1600 fallback: 1000x800); manual
+  placement is then required. Direct `ros2 launch ... presentation:=true` does
+  not invoke the host Windows placement helper. One demo instance is expected.
+  Windows foreground policy can require selecting the applications after launch.
+
+**Presentation-only Omni removal:** the disposable generated vehicle XML removes
+only legacy `Omni` (XYZ 0,0,1.0; 20000 lux; radius 0.1 m). The engineering profile
+and shared XML retain it. Both validated inspection spotlights remain exactly
+XYZ (-0.91,+/-0.24,0.22), RPY (pi/2,0,-pi/2), 1000 lux, unchanged cone/radius.
+Camera mount, optical TF, vehicle/asset geometry and all sensors are unchanged.
+The XML regression compares the entire remaining tree after removing Omni.
+
+**External camera remains MANUAL by user request.** Investigation confirmed
+native `OpenGLTrackball::GlueToMoving` tracks a body at fixed orbit radius, with
+no separate smoothing filter or ROS view service. A short native follow-view
+check was obstructed by a pier pillar; the user requested the original movable
+camera instead. Automatic follow/orbit/HUD manipulation was removed from the
+final launch. No Stonefish source patch or replacement renderer was introduced.
+Use the existing mouse/trackball controls to compose the view; H toggles the
+native HUD when desired. Environment occlusion is possible with manual angles.
+
+Validation: **31 focused tests passed** (rendering, progress mapping, 4:3 fits,
+resizing/freshness, host argument forwarding, engineering defaults, presentation
+size override, Omni-only XML removal, unchanged optical geometry, manual external
+view). **neptune_bringup build passed**; only expected installed-Stonefish overlay
+and disabled-bytecode warnings. `bash -n` and `git diff --check` passed.
+Short runs stopped in early TRANSIT; no full mission or INSPECT/RETURN sequence
+ran. One 28-second TRANSIT interval delivered 280 camera frames (10.0 Hz), with
+canonical state/body command/motor messages at 20.0 Hz. A capture/resize pass
+measured about 9.6 Hz camera and 19.2 Hz telemetry, with state/mission healthy.
+Publisher ownership remained mission_executive / stonefish_vehicle_adapter /
+dead_reckoning_state, respectively. This is UI validation, not a new runtime
+performance certification. An initial follow-view check ended when Stonefish
+exited cleanly before starting the mission; subsequent manual-view runs reached
+TRANSIT normally. The temporary desktop capture harness needed quoting/focus
+corrections; these did not change production controls or acceptance criteria.
+
+Design review: no debug toolbar remains; camera is the focal element and mission
+state is immediately identifiable. Native Stonefish HUD is intentionally still
+available for manual composition. Tall half-desktop windows have letterboxing;
+small rail/secondary labels are less suitable for recording than the main state
+and depth. No status item is styled as an interactive button. A single typography
+polish pass increased secondary/rail readability. External framing still needs
+operator selection to avoid pillars; polished full-mission recording is not
+certified by these short checks.
+
+Evidence: [full desktop during TRANSIT](evidence/demo-polish1/desktop-transit.png),
+[TRANSIT GUI](evidence/demo-polish1/gui-transit.png),
+[800x600 GUI](evidence/demo-polish1/gui-small.png),
+[1400x1000 GUI](evidence/demo-polish1/gui-large.png), and
+[validation summary](evidence/demo-polish1/validation.json).
+The desktop capture shows native Trackball center **Free**, healthy camera/state,
+and no hanging Omni orb; external composition still needs operator adjustment.
+The capture harness raised the X11 windows for the desktop screenshot because
+Windows foreground policy otherwise left the editor in front. Existing uncommitted bow-forward source
+changes were preserved and not rebuilt or reverted. Autonomy, guidance, controls,
+estimation, readiness thresholds, camera/light mounts, vehicle geometry,
+D3D12/LOW engineering graphics, perception/P4 and P5a/P5b were not changed by
+this presentation task. All owned short-run processes were stopped. No commit
+or push occurred.
+
+
+## Faster normal motion tuning — implemented, bounded validation NOT PASSED (2026-10-19)
+
+This record supersedes the old numerical horizontal defaults for CURRENT SOURCE
+only. The known-good Demo V0 installation was NOT overwritten. Existing pending
+bow-forward guidance/adapter changes and all other uncommitted work were preserved.
+Stage 2 remains frozen through S2.6; P5a stays deferred; P5b not started.
+
+Production change is confined to neptune_autonomy/mission_executive.py:
+
+| Parameter | Old | New source |
+| --- | --- | --- |
+| Maximum surge | 0.55 | 0.80 |
+| Distance scheduling gain | 0.10 | 0.16 |
+| Minimum moving surge | 0.15 | 0.20 |
+| Yaw saturation | +/-0.25 | +/-0.60 |
+
+Yaw P=1.40, yaw-rate damping=0.20, translation gate=30 degrees, cutoff <=0.45 m,
+arrival <0.50 m, 20 m pipe offset, 1.5 m inspection standoff, 5 s INSPECT,
+all states/transitions, depth PID/trim, ascent, timeout and freshness are unchanged.
+After distance scheduling and the translation gate, guidance reserves yaw authority:
+`allowed_surge=max(0,1-abs(yaw_cmd)); surge=min(surge,allowed_surge)`.
+Current bow-forward adapter remains `[-surge-yaw, -surge+yaw]` before its defensive
+clamps. Public yaw convention is unchanged. Normal tuning, not presentation-only.
+
+Validation provenance:
+
+- Built ONLY current-source neptune_autonomy and neptune_vehicle into container
+  `/tmp/neptune-speed-validation-install`, with matching build/log bases.
+  Source order: ROS Jazzy, installed Stonefish, existing Demo V0 underlay, then
+  speed validation overlay LAST. Both package prefixes and Python module paths
+  resolve inside the speed overlay; source/installed module bytes were checked
+  equal immediately before the simulator started.
+- Active executive:
+  `/tmp/neptune-speed-validation-install/neptune_autonomy/lib/python3.12/site-packages/neptune_autonomy/mission_executive.py`,
+  SHA256 `10407bf41276b10eae222d7ff9fa00ec032047e3235d3eb2a7310d964fd49f3d`.
+- Active adapter:
+  `/tmp/neptune-speed-validation-install/neptune_vehicle/lib/python3.12/site-packages/neptune_vehicle/stonefish_adapter.py`,
+  SHA256 `5448def6c7b4be299040b8e361f805944190bf828b22cabb2ea988fe2f79ccc3`.
+- Unchanged pressure_depth/dead_reckoning_state came from
+  `/tmp/neptune-demo-v0-install/neptune_state_estimation`.
+- Native executable:
+  `/opt/stonefish_ws/install/stonefish_ros2/lib/stonefish_ros2/stonefish_simulator`.
+  Domain 98; 100 Hz physics; D3D12/NVIDIA; 1280x720 LOW. Existing generated
+  320x240/80-degree camera and Demo camera/light orientation retained. No GUI or
+  perception processes started. No renderer, GUI, sensor, estimator or scene
+  source change. Only the disposable test fixture's initial pose was (-16,0,3),
+  yaw zero; production HOME/waypoints were untouched.
+
+ONE straight-test ATTEMPT ran and stopped during its premeasurement depth-settling
+phase: **pressure receipt age reached >=0.5 s**, triggering the unchanged freshness
+bound and final zero. The requested cruise phase never began. No retry, turn test,
+approach test or full mission ran. The harness exercised production guidance/depth
+methods using canonical state; it never armed or ran the complete state machine.
+Truth was collected solely through existing neptune_evaluation.LateralMotionEvaluation,
+never used for commands or qualification. Failure occurred before the harness's
+postmeasurement truth summary/stream/motor export, so those results are unavailable.
+
+Retained 428 settling command/state samples span 22.807 s. All surge commands were
+zero. Estimated depth ranged 1.97953–3.08094 m during startup settling; last estimate
+was (0.04394,-0.00493,3.08094) m, yaw -5.17 degrees. This startup depth excursion
+is not accepted cruise depth behavior and cannot be attributed to faster surge,
+which never ran. Pressure staleness is the observed stopping condition, not an
+identified root cause or proof of a faster-controller instability. All four owned
+child processes exited cleanly (0); subsequent process audit was clear.
+
+Measured faster average/peak cruise, evaluation displacement, bow-first dynamic
+motion, sustained turn rate/overshoot/oscillation, approach stopping behavior and
+live no-clipping acceptance: **NOT AVAILABLE / NOT VALIDATED**. Static allocation
+checks pass but cannot substitute for these dynamic results. No measured new
+full-mission duration can be estimated. Prior 210–250 s DIVE-to-COMPLETE forecast
+remains an unvalidated planning range, not an observed result.
+
+Focused tests: guidance/bow/adapter 42 passed (initial 0.84 s); existing demo ROS
+integration checks 7 passed (2.10 s). The demo test's old 0.55 assertion was updated
+to the explicitly requested 0.80 while retaining startup/depth/route checks.
+New tests cover scheduling, boundary values, unchanged P/D, 30-degree gate,
+pre-clamp authority through the actual adapter, both motor counts and unchanged
+mission transitions. Existing bow/adapter force-sign and positive-yaw checks retained.
+AST comparison against the task-start executive confirms only __init__ and
+guidance_command changed; state-machine/depth/freshness methods are unchanged.
+Final combined focused run: **49 passed in 0.75 s**. Both package builds PASSED,
+1.47 s total; only disabled-bytecode warnings. git diff --check passed.
+
+Evidence: container `/tmp/neptune-speed-A-3rl9_4kd/{result.json,*.log,*.scn}`;
+host `/tmp/neptune-speed-validation-evidence/`; temporary harness
+`/tmp/neptune_speed_live.py` on host and container. Temporary files can expire.
+
+**Status: tuning IMPLEMENTED, dynamically UNVALIDATED; do not promote to Demo V0.**
+Next step is to inspect the premeasurement sensor freshness/startup failure and
+complete bounded A/B/C validation under separate authorization. Only after those
+pass should the next instrumented full mission measure complete mission duration
+and the long-runtime freeze. Existing Demo camera mounts still face body -X,
+whereas this overlay commands bow +X; this task deliberately did not alter them
+or certify camera framing. No P4/P5, full mission, commit or push occurred.
+
+
+## Faster-motion startup unblock — readiness corrected; motion acceptance still FAILED (2026-10-19)
+
+No production tuning/safety/estimator/graphics/GUI/camera/P4/P5 file changed.
+The preceding faster-motion values and known-good Demo V0 install are preserved.
+Stage 2 stays frozen through S2.6. This task ran one 60 s startup trace and one
+bounded A attempt; B/C and the full mission were NOT run after A failed.
+
+Original harness diagnosis: `/tmp/neptune_speed_live_original.py` called `fresh()`
+every settling tick and raised immediately if a pressure receipt was >=0.5 s old.
+It had neither Demo V0 startup qualification nor a recovery wait before motion.
+It started depth control at the first state instead of Demo V0's passive settling
+then DIVE. The original raw pressure timestamps were not exported on failure, so
+its exact pressure rate/interarrival gap and recovery cannot be reconstructed.
+The exact known abort is the first >=0.5 s receipt-age check, not a proven native
+pressure defect. Configured pressure rate is 5.0 Hz.
+
+One fresh startup trace, same graphical configuration and initial test fixture:
+
+| Stream | Overall interreceipt rate | Maximum interreceipt gap |
+| --- | --- | --- |
+| Pressure | 4.904 Hz | 1.23836 s |
+| IMU | 19.616 Hz | 1.09314 s |
+| DVL | 19.616 Hz | 1.09314 s |
+| Canonical state | 19.617 Hz | 1.09307 s |
+| Inspection image | 9.718 Hz after first image | 1.20445 s |
+
+Around 31.7–32.3 s from the first trace snapshot, all four required input health
+flags were false; this was a shared delivery interruption, not isolated pressure
+loss. All recovered. Production readiness first became true at 40.075 s from
+that snapshot. In the final [40,60] s window, pressure was 5.00 Hz/max gap 0.20902 s,
+state 20.00 Hz/max gap 0.05359 s, camera 10.05 Hz/max gap 0.17415 s. State values
+were finite, but freshness was NOT continuously valid through startup. Native
+truth samples show passive rise from 3.0 to 0.448 m, followed by settling.
+This establishes recovery/continued physical evolution, not normal stepping
+through the gap: no independent physics clock/thread trace was recorded, and
+ROS header stamps are wall time. The underlying shared pause remains unresolved.
+
+Only the temporary harness was changed to reuse the byte-equal installed
+`neptune_bringup.demo_readiness.ReadinessNode` with unchanged defaults:
+15 s minimum startup, 3 s physical stability window, pressure depth-rate <0.05 m/s,
+IMU yaw-rate <0.03 rad/s, receipt age <0.5 s, source age in [-0.05,0.5) s,
+finite/advancing inputs and exclusive production publisher ownership. The harness
+explicitly waits for Stonefish Ready, publishes zero during startup, tolerates
+prequalification gaps, and requires an additional continuous 3 s ready window.
+Then it exercises the unchanged executive DIVE until its TRANSIT transition;
+no ordinary TRANSIT route or subsequent mission states execute. Bounded guidance
+is invoked only after that. During the actual test, receipt freshness and the
+production readiness gate remain strict: any loss ends the test with zero.
+A failure-safe exporter now retains receipts, state/command/native-motor histories
+and existing evaluation-only truth records even when an assertion aborts.
+Truth is never used in readiness or control.
+
+A rerun provenance: same `/tmp/neptune-speed-validation-install` sourced LAST;
+active autonomy/adapter package prefixes and module paths reverified, and both
+installed modules byte-equal to current `/workspace/src` source before launch.
+The source hashes remain the preceding record's 10407bf... executive and 5448def...
+adapter. Unchanged estimator/readiness/sim resources use `/tmp/neptune-demo-v0-install`;
+native Stonefish remains `/opt/stonefish_ws/install/stonefish_ros2/lib/stonefish_ros2/stonefish_simulator`.
+ROS domain 98, D3D12/NVIDIA, 1280x720 LOW, 100 Hz physics, existing inspection optics,
+lights and mounts. No GUI/perception process started; no rendering configuration change.
+
+**A began motion but FAILED production readiness after approximately 1.9 s.**
+It had completed startup qualification and normal DIVE. Available measurements:
+
+- Estimated position: (0.06378,-0.01612,2.88802) m at first command to
+  (0.28140,-0.06845,2.98713) m at final received state.
+- Initial acceleration interval average horizontal speed 0.11593 m/s;
+  peak 0.22622 m/s. No steady cruise window exists; these are NOT cruise results.
+- Evaluation-only truth displacement (+0.21854,-0.05205,+0.09901) m;
+  projection along initial bow positive; estimated displacement/bow cosine 0.9914.
+  Lateral deviation about 0.0523 m; estimated depth 2.888–2.987 m.
+- Initial yaw about -21.13 degrees from unchanged DIVE drift; yaw error decreased
+  from 21.13 to 8.05 degrees. Too short to certify absence of later oscillation.
+- Maximum surge 0.80, yaw demand magnitude 0.51917. Maximum scheduled premix and
+  observed normalized motor demand both 1.00; no demand exceeded the limit and
+  no clipping distortion was required. Native setpoint peak 104.719755 rad/s
+  (1000 RPM demand). Native rotor speed transient reached about 1685.86 RPM;
+  commanded setpoint limits do not bound mechanical-PI rotor overshoot. This is
+  an additional unvalidated actuator-transient risk, not a retuning recommendation.
+
+Near abort, observer receipt intervals remained live (pressure ~0.20 s;
+state ~0.05 s), with no recorded nonadvancing pressure/IMU/DVL/state stamps.
+Camera stamp stepped backward by 0.42045 s while receipt advanced 0.07044 s.
+This is consistent with a wall-clock discontinuity making recent scalar source
+stamps too far in the future for the production gate. It is NOT conclusively
+proven: the exact failed gate snapshot/ROS-now was not retained in this attempt,
+and ReadinessNode has its own callbacks. The actual stopping condition was
+production readiness invalidity, not a receipt-age failure. Final harness logging
+now exports that snapshot/ROS-now on future gate loss; this logging-only addition
+was syntax-checked, not rerun. No clock/safety/threshold fix was applied.
+
+All four child processes exited 0 and the subsequent process audit was clear.
+B yaw-rate/overshoot/oscillation and C slowdown/arrival/overshoot remain NOT TESTED.
+Faster tuning remains dynamically UNVALIDATED. No measured full-mission duration
+estimate is justified by a 1.9 s acceleration interval; prior 210–250 s remains
+only an unvalidated forecast. No gain/saturation reduction is supported by this
+freshness failure; identify the source-time/readiness loss before further motion.
+
+Checks: existing readiness recovery/fail-closed suite **7 passed in 0.01 s**;
+temporary harness Python syntax passed; `git diff --check` passed. No production
+code changed, so no package rebuild was required; reused current-source overlay
+with verified byte equality. Prior 49 focused passes and two successful package
+builds remain historical results, not new runs in this task.
+
+Evidence: container `/tmp/neptune-speed-trace-m7pfc1u0` and
+`/tmp/neptune-speed-A-f4bh6cpr`; host `/tmp/neptune-speed-startup-trace` and
+`/tmp/neptune-speed-unblock-A`; final host/container `/tmp/neptune_speed_live.py`,
+original host `/tmp/neptune_speed_live_original.py`. Temporary evidence may expire.
+Repository changes this task are this appended record and its counterpart in the
+other project document. All pre-existing uncommitted work is preserved.
+**STOPPED after A failure. No B/C, full mission, production retuning, commit or push.**
+
+
+## Receipt-based readiness correction (2026-10-19)
+
+Readiness now uses monotonic receipt age (< unchanged 0.5 s) plus existing payload
+validity for pressure/IMU/DVL/state. Backward/duplicate/nonfinite source stamps
+and source age are diagnostic-only (`source_time_health`), not liveness gates.
+Startup pressure-rate calculation also uses monotonic receipt intervals; existing
+physical stability limits, startup windows, ownership and timeout values remain.
+Only production readiness.py and its focused tests changed; estimator, controls,
+tuning, actuator limits, GUI, graphics, camera and P4/P5 remain untouched.
+
+Focused readiness tests: **15 passed, 0.02 s**. One initial new-test failure was a
+fixture rounding issue (snapshot just before the last receipt); fixture corrected.
+Built ONLY neptune_bringup into `/tmp/neptune-receipt-validation-install`:
+**PASS, 0.93 s**, expected underlay/disabled-bytecode warnings. Dynamic harness
+verified this installed readiness byte-equal to current source. Source order:
+ROS, Stonefish, known-good Demo V0, speed overlay local_setup, receipt overlay
+local_setup last; active autonomy/adapter still resolve to the byte-verified
+`/tmp/neptune-speed-validation-install`. Known-good Demo V0 was not overwritten.
+
+ONE A attempt requested 20 s, but aborted after about 0.44 s at the unchanged
+monotonic pressure receipt-age limit. Last pressure receipt 10129.056064 s;
+last nonzero test-command sample 10129.530161 s; final zero observed
+10129.586494 s. IMU/DVL/state also stopped arriving before measurement start;
+only one camera receipt followed, with a backward source stamp. No fresh motion
+state or evaluation truth arrived during the test window. This is a real receipt
+liveness failure, not source-time diagnostic rejection. No useful cruise speed
+was measured; B yaw and C approach were NOT RUN because A did not pass.
+All four child processes exited 0; subsequent process audit clear. No retuning,
+actuator-limit change or retry. All-three dynamic acceptance remains **NO**.
+
+Evidence: container `/tmp/neptune-speed-A-qwea3sm8`, host
+`/tmp/neptune-receipt-A-evidence/result.json`; temporary harness
+`/tmp/neptune_speed_live.py` changed only for 20 s A and overlay verification.
+`git diff --check` passed. No full mission, commit or push occurred.
+
+
+## Safe presentation renderer — test-only correction (2026-10-20)
+
+Supersedes the tall Stonefish presentation geometry above. Both engineering and
+presentation now request **1280x720 LOW** Stonefish, independent of desktop size
+and NEPTUNE_PRESENTATION_WIDTH/HEIGHT. Those host dimensions size the GUI only.
+The Windows helper moves Stonefish to the left and centers its existing outer
+window vertically using SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE (0x15), with zero
+resize requests. It does not restore/maximize/stretch Stonefish. The polished GUI
+is resized/positioned on the right. Existing camera/manual-view/presentation-light
+behavior is unchanged; no control, mission, readiness, estimator, sensor, camera,
+physics or P4/P5 source changed. The no-flag host runner is byte-unchanged.
+
+Placement uses the actual decorated Stonefish bounds. Synthetic 2560x1540 work-area
+case, outer size 1296x760 for a 1280x720 client: Stonefish outer position (0,390),
+GUI outer bounds (1308,12,1240,1516). This is tested geometry, not a live Windows
+measurement. Desktops too narrow for both may overlap; the renderer is never
+resized to fit. Oversized Stonefish presentation rendering is no longer selected.
+
+Validation: **28 presentation/launcher tests passed (0.47 s)**, including launch
+construction (never action execution), exact 100/1280/720/low arguments in both
+modes, oversized GUI environment inputs, normal defaults, passthrough arguments,
+and move-only Win32 flags. **3 Windows PowerShell tests passed** by parsing the
+script and executing only its pure placement function (no window discovery/moves).
+Python compile, bash syntax, PowerShell parse and git diff --check passed.
+Built only neptune_bringup into `/tmp/neptune-safe-presentation-install`:
+**PASS, 0.94 s**, expected underlay/disabled-bytecode warnings. Existing installed
+Demo V0 was not overwritten. Record with the tested build:
+
+```bash
+NEPTUNE_DEMO_INSTALL=/tmp/neptune-safe-presentation-install ./scripts/run_demo_v0.sh --presentation
+```
+
+**No Stonefish, Demo V0 or mission was launched.** No live framebuffer/performance
+or sustained-freeze acceptance is claimed by these static tests. Existing
+uncommitted work was preserved; no commit or push occurred.

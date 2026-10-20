@@ -1,0 +1,71 @@
+{
+  "date": "2026-10-19",
+  "scope": "Demo V0 generated scene and mount TF only",
+  "visual_fixture": {
+    "position_m": [
+      -17.5,
+      0,
+      3
+    ],
+    "yaw_rad": 0,
+    "fixed": true,
+    "auto_start": false,
+    "seconds_after_ready": 25.007584079000026
+  },
+  "camera": {
+    "position_m": [
+      -0.97,
+      0,
+      0.2
+    ],
+    "rpy_rad": [
+      1.5707963267948966,
+      0,
+      -1.5707963267948966
+    ],
+    "body_view_axis": [
+      -1,
+      0,
+      0
+    ],
+    "body_image_right": [
+      0,
+      -1,
+      0
+    ],
+    "body_image_down": [
+      0,
+      0,
+      1
+    ],
+    "resolution": [
+      320,
+      240
+    ],
+    "hfov_deg": 80,
+    "configured_hz": 10,
+    "image_frame": "GIRONA500/inspection_camera_optical_frame",
+    "camera_info_frame": "GIRONA500/inspection_camera_optical_frame"
+  },
+  "gui": {
+    "camera_live": true,
+    "camera_fps_recent": 10.176612984710584,
+    "state_live": true,
+    "mission_state": "INITIALIZING",
+    "mission_status_live": true,
+    "receipt_monotonic": 3134.748642844,
+    "received_frames": 137,
+    "displayed_frames": 137,
+    "max_display_gap": 0.1911085679998905,
+    "camera_error": "",
+    "screenshots": [
+      "INITIALIZING",
+      "INITIALIZING-live"
+    ]
+  },
+  "nonzero_command_count": 0,
+  "visual_result": "Pipe, flange on left, valve/handwheel upright on right, no hull occlusion. User confirmed looks good now.",
+  "lights": "Both local +Z beam axes map to body -X; relocated lamp-to-pipe rays clear the hull mesh. Daylight and original Omni remain present; contribution not isolated photometrically.",
+  "full_mission_ran": false,
+  "raw_evidence_container": "/tmp/neptune-demo-orientation-0yrr1x6c"
+}

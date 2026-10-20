@@ -21,12 +21,13 @@ class DemoReadiness:
         self.qualified = False
 
     def observe(self, name, receipt, stamp, valid=True):
-        """Reject nonadvancing source stamps while allowing later recovery."""
+        """Use receipt time for liveness; retain source progression diagnostically."""
         previous = self.samples.get(name)
-        valid = (valid and math.isfinite(stamp)
-                 and (previous is None or not math.isfinite(previous['stamp'])
-                      or stamp > previous['stamp']))
-        self.samples[name] = dict(receipt=receipt, stamp=stamp, valid=valid)
+        source_advancing = (math.isfinite(stamp)
+                            and (previous is None or not math.isfinite(previous['stamp'])
+                                 or stamp > previous['stamp']))
+        self.samples[name] = dict(receipt=receipt, stamp=stamp, valid=valid,
+                                  source_advancing=source_advancing)
         if self.first_sample is None:
             self.first_sample = receipt
         return valid
@@ -37,11 +38,11 @@ class DemoReadiness:
         depth = pressure / (997.0 * 9.81) + 0.40
         rate = None
         if valid and self.previous_pressure is not None:
-            old_stamp, old_depth = self.previous_pressure
-            dt = stamp - old_stamp
+            old_receipt, old_depth = self.previous_pressure
+            dt = receipt - old_receipt
             if 0 < dt < 1.0:
                 rate = (depth - old_depth) / dt
-        self.previous_pressure = (stamp, depth) if valid else None
+        self.previous_pressure = (receipt, depth) if valid else None
         self.depth_rates.append((receipt, rate))
 
     def imu(self, receipt, stamp, yaw_rate, orientation_valid=True):
@@ -67,10 +68,15 @@ class DemoReadiness:
     def snapshot(self, now, ros_now):
         """After startup, monitor freshness without requiring a moving robot to settle."""
         health = {}
+        source_time_health = {}
         for name in self.required:
             s = self.samples.get(name)
             health[name] = bool(
                 s and s['valid'] and 0 <= now - s['receipt'] < self.timeout
+            )
+            # Diagnostic only: ROS/source clocks may jump while delivery is live.
+            source_time_health[name] = bool(
+                s and s['source_advancing']
                 and -0.05 <= ros_now - s['stamp'] < self.timeout
             )
         reason = 'State and required sensors are live'
@@ -87,5 +93,5 @@ class DemoReadiness:
                 self.qualified = True
         ready = all(health.values()) and self.qualified
         return dict(ready=ready, startup_qualified=self.qualified,
-                    sensor_health=health, reason=reason,
+                    sensor_health=health, source_time_health=source_time_health, reason=reason,
                     freshness_s=self.timeout, stable_window_s=self.stable_window)

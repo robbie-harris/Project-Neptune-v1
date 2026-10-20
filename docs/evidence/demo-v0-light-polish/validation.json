@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-19",
+  "old_positions_m": [
+    [
+      -0.91,
+      -0.24,
+      0.5
+    ],
+    [
+      -0.91,
+      0.24,
+      0.5
+    ]
+  ],
+  "new_positions_m": [
+    [
+      -0.91,
+      -0.24,
+      0.22
+    ],
+    [
+      -0.91,
+      0.24,
+      0.22
+    ]
+  ],
+  "rpy_unchanged_rad": [
+    1.5707963267948966,
+    0,
+    -1.5707963267948966
+  ],
+  "illuminance_old_lux": 800,
+  "illuminance_new_lux": 1000,
+  "cone_unchanged_deg": 90,
+  "radius_unchanged_m": 0.015,
+  "camera_unchanged": true,
+  "camera_xyz_m": [
+    -0.97,
+    0,
+    0.2
+  ],
+  "camera_frame": "GIRONA500/inspection_camera_optical_frame",
+  "camera_info_frame": "GIRONA500/inspection_camera_optical_frame",
+  "gui_health": {
+    "camera_live": true,
+    "camera_fps_recent": 10.019064249982847,
+    "state_live": true,
+    "mission_state": "INITIALIZING",
+    "mission_status_live": true,
+    "receipt_monotonic": 3718.164624661,
+    "received_frames": 129,
+    "displayed_frames": 129,
+    "max_display_gap": 1.1350873810001758,
+    "camera_error": "",
+    "screenshots": [
+      "INITIALIZING",
+      "INITIALIZING-live"
+    ]
+  },
+  "fixture_position_m": [
+    -17.5,
+    0,
+    3
+  ],
+  "fixed_fixture": true,
+  "seconds_after_ready": 25.01029419300039,
+  "nonzero_commands": [],
+  "camera_saturated_white_pixel_fraction": 0.0,
+  "remaining_external_issue": "Bright orb below vehicle is unchanged original Omni at (0,0,1.0), radius 0.1, 20000 lux. Inspection pair relocation does not remove it.",
+  "full_mission_ran": false,
+  "raw_evidence_container": "/tmp/neptune-demo-light-polish-upyox3gr"
+}

@@ -53,3 +53,17 @@ rosbag2_*/
 # External/generated dependencies.
 # Required Stonefish modifications belong in docker/stonefish_overrides/.
 external/
+
+# Local recordings, downloaded model weights, and passive diagnostic output
+recordings/
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.webm
+*.pt
+*.pth
+*.onnx
+*.engine
+neptune-freeze-diagnostic-*/
+/tmp/

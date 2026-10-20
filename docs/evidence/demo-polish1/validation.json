@@ -1,0 +1,220 @@
+{
+  "validation": "short INITIALIZING -> DIVE -> TRANSIT only",
+  "raw_directory": "/tmp/neptune-polish1-live-hoh3qtzp",
+  "error": null,
+  "phases": [
+    "INITIALIZING",
+    "WAIT_FOR_STATE",
+    "DIVE",
+    "TRANSIT"
+  ],
+  "transit_wall_s": 28.0123697479994,
+  "rates": {
+    "camera": {
+      "messages": 269,
+      "hz": 9.602900519304033
+    },
+    "state": {
+      "messages": 538,
+      "hz": 19.205801038608065
+    },
+    "cmd": {
+      "messages": 538,
+      "hz": 19.205801038608065
+    },
+    "motors": {
+      "messages": 538,
+      "hz": 19.205801038608065
+    }
+  },
+  "publisher_ownership": {
+    "/neptune/cmd_body": [
+      "mission_executive"
+    ],
+    "/sim/thruster_setpoints": [
+      "stonefish_vehicle_adapter"
+    ],
+    "/state/odometry": [
+      "dead_reckoning_state"
+    ]
+  },
+  "last_readiness": {
+    "time": 5108.31711188,
+    "ready": true,
+    "startup_qualified": true,
+    "sensor_health": {
+      "pressure": true,
+      "imu": true,
+      "dvl": true,
+      "state": true
+    },
+    "reason": "State and required sensors are live",
+    "freshness_s": 0.5,
+    "stable_window_s": 3.0,
+    "publisher_ownership": {
+      "/neptune/cmd_body": true,
+      "/sim/thruster_setpoints": true,
+      "/state/odometry": true
+    }
+  },
+  "gui_final": {
+    "camera_live": true,
+    "camera_fps_recent": 9.972571007992196,
+    "state_live": true,
+    "mission_state": "TRANSIT",
+    "mission_status_live": true,
+    "autonomy_status": "ACTIVE",
+    "progress_index": 2,
+    "window_size": [
+      1246,
+      1476
+    ],
+    "camera_rect": [
+      31,
+      444,
+      864,
+      648
+    ],
+    "receipt_monotonic": 5107.551555521,
+    "received_frames": 516,
+    "displayed_frames": 516,
+    "max_display_gap": 1.184176935999858,
+    "camera_error": "",
+    "screenshots": [
+      "DIVE",
+      "INITIALIZING",
+      "INITIALIZING-live",
+      "TRANSIT",
+      "WAIT_FOR_STATE"
+    ]
+  },
+  "resizes": {
+    "gui-transit": {
+      "camera_live": true,
+      "camera_fps_recent": 9.826330173328014,
+      "state_live": true,
+      "mission_state": "DIVE",
+      "mission_status_live": true,
+      "autonomy_status": "ACTIVE",
+      "progress_index": 1,
+      "window_size": [
+        1246,
+        1476
+      ],
+      "camera_rect": [
+        31,
+        444,
+        864,
+        648
+      ],
+      "receipt_monotonic": 5079.992656827,
+      "received_frames": 251,
+      "displayed_frames": 251,
+      "max_display_gap": 1.1261104609993708,
+      "camera_error": "",
+      "screenshots": [
+        "DIVE",
+        "INITIALIZING",
+        "INITIALIZING-live",
+        "WAIT_FOR_STATE"
+      ]
+    },
+    "gui-small": {
+      "camera_live": true,
+      "camera_fps_recent": 9.88329891930983,
+      "state_live": true,
+      "mission_state": "TRANSIT",
+      "mission_status_live": true,
+      "autonomy_status": "ACTIVE",
+      "progress_index": 2,
+      "window_size": [
+        800,
+        600
+      ],
+      "camera_rect": [
+        25,
+        129,
+        528,
+        396
+      ],
+      "receipt_monotonic": 5084.057675368,
+      "received_frames": 291,
+      "displayed_frames": 291,
+      "max_display_gap": 1.1261104609993708,
+      "camera_error": "",
+      "screenshots": [
+        "DIVE",
+        "INITIALIZING",
+        "INITIALIZING-live",
+        "TRANSIT",
+        "WAIT_FOR_STATE"
+      ]
+    },
+    "gui-large": {
+      "camera_live": true,
+      "camera_fps_recent": 9.982223738869216,
+      "state_live": true,
+      "mission_state": "TRANSIT",
+      "mission_status_live": true,
+      "autonomy_status": "ACTIVE",
+      "progress_index": 2,
+      "window_size": [
+        1400,
+        1000
+      ],
+      "camera_rect": [
+        58,
+        170,
+        960,
+        720
+      ],
+      "receipt_monotonic": 5085.060748253,
+      "received_frames": 302,
+      "displayed_frames": 302,
+      "max_display_gap": 1.1261104609993708,
+      "camera_error": "",
+      "screenshots": [
+        "DIVE",
+        "INITIALIZING",
+        "INITIALIZING-live",
+        "TRANSIT",
+        "WAIT_FOR_STATE"
+      ]
+    }
+  },
+  "desktop": [
+    2560,
+    1600
+  ],
+  "working_area": [
+    0,
+    0,
+    2560,
+    1540
+  ],
+  "outer_rectangles": {
+    "gui": [
+      12,
+      12,
+      1262,
+      1516
+    ],
+    "stonefish": [
+      1286,
+      12,
+      1262,
+      1516
+    ]
+  },
+  "gap_px": 12,
+  "external_camera": "native Free/manual; automatic follow removed at user request",
+  "presentation_omni_removed": true,
+  "inspection_camera_and_spotlights_unchanged": true,
+  "focused_tests": {
+    "passed": 31,
+    "seconds": 0.72
+  },
+  "build": "neptune_bringup passed; expected overlay/bytecode warnings",
+  "no_full_mission": true,
+  "no_commit_or_push": true
+}

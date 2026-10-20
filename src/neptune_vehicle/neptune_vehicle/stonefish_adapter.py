@@ -66,9 +66,11 @@ class StonefishVehicleAdapter(Node):
         # 4 Sway
         # 5 SwayFront (perception mode only)
         # 6 SwayRear (perception mode only)
+        # Native surge motors invert setpoints: negate surge for body +X bow
+        # propulsion, retaining the existing differential public yaw convention.
         msg.data = [
-            clamp(surge - yaw),
-            clamp(surge + yaw),
+            clamp(-surge - yaw),
+            clamp(-surge + yaw),
             clamp(-heave),
             clamp(-heave),
             clamp(sway),

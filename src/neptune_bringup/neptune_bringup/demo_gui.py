@@ -60,6 +60,8 @@ class DemoGui(Node):
     def __init__(self, **options):
         super().__init__('demo_gui', **options)
         self.evidence_directory = self.declare_parameter('evidence_directory', '').value
+        self.window_width = self.declare_parameter('window_width', 1280).value
+        self.window_height = self.declare_parameter('window_height', 880).value
         self.lock = threading.Lock()
         self.latest_image = None
         self.image_sequence = 0
@@ -134,93 +136,160 @@ class DemoGui(Node):
                         health_receipt=self.health_receipt)
 
 
-def text(canvas, value, x, y, size=0.6, color=FG, weight=1):
-    """Draw consistent readable UI typography."""
-    cv2.putText(canvas, str(value), (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+PROGRESS_STAGES = ('INIT', 'DIVE', 'TRANSIT', 'INSPECT', 'RETURN', 'ASCEND', 'COMPLETE')
+MINIMUM_SIZE = (720, 540)
+WINDOW_FLAGS = cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL | cv2.WINDOW_FREERATIO
+
+
+def mission_progress(phase):
+    """Merge startup/waiting into one non-interactive presentation stage."""
+    return 0 if phase in ('INITIALIZING', 'WAIT_FOR_STATE') else PROGRESS_STAGES.index(phase)
+
+
+def image_fit(source, bounds):
+    """Center an undistorted image; prefer integer upscaling when it wastes <15%."""
+    sw, sh = source
+    x, y, width, height = bounds
+    scale = min(width/sw, height/sh)
+    integer = math.floor(scale)
+    if integer >= 1 and integer/scale >= 0.85:
+        scale = integer
+    divisor = math.gcd(sw, sh)
+    unit = max(1, math.floor(scale*divisor))
+    dw, dh = sw//divisor*unit, sh//divisor*unit
+    return x+(width-dw)//2, y+(height-dh)//2, dw, dh
+
+
+def text(canvas, value, x, y, size=0.6, color=FG, weight=1, max_width=None):
+    """Draw quiet, consistently sized typography, fitting long mission labels."""
+    value = str(value)
+    if max_width:
+        width = cv2.getTextSize(value, cv2.FONT_HERSHEY_SIMPLEX, size, weight)[0][0]
+        if width > max_width:
+            size *= max_width/width
+    cv2.putText(canvas, value, (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX,
                 size, color, weight, cv2.LINE_AA)
 
 
-def render(snapshot, image, now, ros_now, camera_error=''):
-    """Compose a camera-first observational display without generated detections."""
-    canvas = np.full((880, 1280, 3), BG, dtype=np.uint8)
-    cv2.rectangle(canvas, (0, 0), (1279, 82), PANEL, -1)
-    text(canvas, 'PROJECT NEPTUNE', 24, 43, 1.05, CYAN, 2)
-    text(canvas, 'MARINE INSPECTION  /  DEMO V0', 26, 66, 0.43, MUTED)
-    text(canvas, 'ONBOARD AUTONOMY', 991, 35, 0.49, GREEN)
-    text(canvas, 'PERCEPTION: DISABLED', 984, 60, 0.46, MUTED)
-    text(canvas, 'INSPECTION CAMERA', 24, 110, 0.48, MUTED)
+def status(canvas, label, value, x, y, live, width):
+    """Compact health indicator, never a control."""
+    text(canvas, label, x, y, 0.45, MUTED)
+    cv2.circle(canvas, (x+76, y-4), 3, GREEN if live else AMBER, -1, cv2.LINE_AA)
+    text(canvas, value, x+88, y, 0.47, GREEN if live else AMBER,
+         max_width=width-88)
+
+
+def render(snapshot, image, now, ros_now, camera_error='', size=(1280, 880)):
+    """Responsive camera-first presentation; ROS inputs and freshness rules unchanged."""
+    width, height = max(MINIMUM_SIZE[0], size[0]), max(MINIMUM_SIZE[1], size[1])
+    canvas = np.full((height, width, 3), BG, dtype=np.uint8)
+    margin = max(20, min(32, round(width*0.024)))
+    gap = 24
+    header = min(96, round(height*0.15))
+    sidebar = max(198, min(300, round((width-2*margin)*0.25)))
+    sx = width-margin-sidebar
+    bottom = height-74
+    top = header+38
+    span = bottom-top
     camera_at = snapshot['image_receipt']
-    camera_live = camera_at is not None and now - camera_at < 0.5 and not camera_error
+    camera_live = camera_at is not None and now-camera_at < 0.5 and not camera_error
     msg = snapshot['image']
     if msg is not None:
-        age = ros_now - msg.header.stamp.sec - msg.header.stamp.nanosec / 1e9
+        age = ros_now-msg.header.stamp.sec-msg.header.stamp.nanosec/1e9
         camera_live = camera_live and -0.05 <= age < 0.5
-    if image is not None:
-        h, w = image.shape[:2]
-        scale = min(920 / w, 690 / h)
-        dw, dh = round(w*scale), round(h*scale)
-        pixels = cv2.resize(image, (dw, dh), interpolation=cv2.INTER_LINEAR)
-        left, top = 24 + (920-dw)//2, 122 + (690-dh)//2
-        canvas[top:top+dh, left:left+dw] = pixels
-    else:
-        cv2.rectangle(canvas, (24, 122), (943, 811), PANEL, -1)
-        text(canvas, 'WAITING FOR LIVE CAMERA', 238, 467, 0.9, MUTED)
-    cv2.rectangle(canvas, (24, 122), (943, 811), CYAN if camera_live else MUTED, 1)
-    badge = 'LIVE' if camera_live else 'WAITING' if camera_at is None else 'STALE'
-    text(canvas, badge, 830, 110, 0.48, GREEN if camera_live else AMBER, 2)
-    cv2.rectangle(canvas, (963, 94), (1255, 811), PANEL, -1)
+    state_live = snapshot['state_receipt'] is not None and now-snapshot['state_receipt'] < 0.5
     mission = snapshot['mission']
-    mission_fresh = (snapshot['mission_receipt'] is not None
-                     and now - snapshot['mission_receipt'] < 0.75)
+    mission_fresh = snapshot['mission_receipt'] is not None and now-snapshot['mission_receipt'] < 0.75
     phase = mission.get('state', 'INITIALIZING')
-    text(canvas, 'MISSION', 984, 126, 0.5, MUTED)
-    label = 'WAIT FOR STATE' if phase == 'WAIT_FOR_STATE' else phase
-    text(canvas, label, 984, 160, 0.72 if len(label) < 13 else 0.58,
-         CYAN if mission_fresh else AMBER, 2)
-    t = snapshot['telemetry']
-    state_live = snapshot['state_receipt'] is not None and now - snapshot['state_receipt'] < 0.5
-    text(canvas, 'DEPTH', 984, 210, 0.5, MUTED)
-    text(canvas, '--' if t is None else f"{t['depth']:.2f}", 980, 272, 1.9, FG, 2)
-    text(canvas, 'm', 1190, 272, 0.7, MUTED)
-    text(canvas, 'ONBOARD STATE', 984, 326, 0.46, MUTED)
-    text(canvas, 'LIVE' if state_live else 'WAITING / STALE', 984, 351,
-         0.6, GREEN if state_live else AMBER, 2)
-    text(canvas, 'Pressure + IMU + DVL', 984, 376, 0.43, MUTED)
+    current = mission_progress(phase)
+    ready = snapshot['health'].get('ready', False)
+    active = current > 0 and phase != 'COMPLETE' and ready and state_live and mission_fresh
+    autonomy = ('COMPLETE' if mission.get('complete') else 'TIMEOUT'
+                if mission.get('outcome') == 'TIMEOUT' else 'ACTIVE' if active else
+                'STANDBY' if current == 0 else 'PAUSED')
     receipts = snapshot['receipts']
     fps = (len(receipts)-1)/(receipts[-1]-receipts[0]) if len(receipts)>1 and camera_live else 0.0
-    text(canvas, 'CAMERA', 984, 425, 0.46, MUTED)
-    text(canvas, f'{fps:.1f} Hz  /  320 x 240', 984, 452, 0.57, FG)
-    text(canvas, '80 deg HFOV  /  RGB', 984, 478, 0.43, MUTED)
-    text(canvas, 'ESTIMATED POSITION', 984, 527, 0.46, MUTED)
-    text(canvas, '--' if t is None else f"X {t['x']:+.2f}   Y {t['y']:+.2f} m", 984, 554, 0.53)
-    text(canvas, '--' if t is None else f"Heading {t['heading']:+.1f} deg", 984, 580, 0.48, MUTED)
-    elapsed = mission.get('mission_elapsed_s', 0.0)
-    text(canvas, 'MISSION TIME', 984, 628, 0.46, MUTED)
-    text(canvas, f'{int(elapsed)//60:02d}:{int(elapsed)%60:02d}', 984, 666, 1.0, FG)
-    if mission.get('complete'):
-        note, color = 'MISSION COMPLETE', GREEN
-    elif mission.get('outcome') == 'TIMEOUT':
-        note, color = 'MISSION TIMEOUT', RED
-    elif not mission_fresh:
-        note, color = 'Awaiting mission status', AMBER
-    elif phase == 'INITIALIZING':
-        note = 'Ready - awaiting start' if snapshot['health'].get('ready') else 'Qualifying startup'
-        color = AMBER
+
+    # One quiet header; no engineering toolbar or application controls.
+    cv2.rectangle(canvas, (0, 0), (width-1, header-1), PANEL, -1)
+    brand = 0.82 if width >= 900 else 0.65
+    text(canvas, 'PROJECT NEPTUNE', margin, 39, brand, FG, 2)
+    text(canvas, 'Autonomous Subsea Inspection', margin+1, 63, 0.43, MUTED)
+    tag_x = width-margin-174
+    text(canvas, 'AUTONOMY', tag_x, 27, 0.36, MUTED)
+    cv2.circle(canvas, (tag_x+3, 45), 3, GREEN if active or autonomy == 'COMPLETE' else MUTED, -1)
+    text(canvas, autonomy, tag_x+15, 50, 0.48, GREEN if active or autonomy == 'COMPLETE' else FG)
+    text(canvas, 'PERCEPTION  DISABLED', tag_x, 72, 0.36, MUTED)
+
+    camera_bounds = (margin, top, sx-gap-margin, span)
+    text(canvas, 'INSPECTION CAMERA', margin, top-14, 0.42, MUTED)
+    badge = 'LIVE' if camera_live else 'WAITING' if camera_at is None else 'STALE'
+    badge_x = sx-gap-74
+    cv2.circle(canvas, (badge_x, top-19), 3, GREEN if camera_live else AMBER, -1)
+    text(canvas, badge, badge_x+11, top-14, 0.41, GREEN if camera_live else AMBER)
+    bx, by, bw, bh = camera_bounds
+    cv2.rectangle(canvas, (bx, by), (bx+bw-1, by+bh-1), (18, 13, 9), -1)
+    image_rect = None
+    if image is not None:
+        ih, iw = image.shape[:2]
+        left, y, dw, dh = image_fit((iw, ih), camera_bounds)
+        integral = dw % iw == 0 and dh % ih == 0
+        pixels = cv2.resize(image, (dw, dh), interpolation=(
+            cv2.INTER_NEAREST if integral else cv2.INTER_CUBIC))
+        canvas[y:y+dh, left:left+dw] = pixels
+        image_rect = [left, y, dw, dh]
     else:
-        note, color = 'Autonomy active' if snapshot['health'].get('ready') else 'Paused: sensor health', GREEN
-    text(canvas, note, 984, 727, 0.53, color, 1)
-    text(canvas, 'READ-ONLY DISPLAY', 984, 786, 0.42, MUTED)
-    current = STAGES.index(phase)
-    for index, stage in enumerate(STAGES):
-        left = 24 + index*155
-        selected = index == current
-        color = CYAN if selected else GREEN if index < current else MUTED
-        cv2.rectangle(canvas, (left, 834), (left+143, 863), color, 1)
-        text(canvas, 'WAIT FOR STATE' if stage == 'WAIT_FOR_STATE' else stage,
-             left+6, 853, 0.35, color, 1)
+        label = 'Awaiting camera'
+        tw = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, .55, 1)[0][0]
+        text(canvas, label, bx+(bw-tw)//2, by+bh//2, .55, MUTED)
+
+    # Readable status column with no boxed tabs, sensor internals or fake detections.
+    cv2.line(canvas, (sx-12, top), (sx-12, bottom), PANEL, 1)
+    text(canvas, 'MISSION', sx+8, top+8, .45, MUTED)
+    label = 'INITIALIZING' if current == 0 else phase
+    text(canvas, label, sx+6, top+48, 1.0, CYAN if mission_fresh else MUTED, 2,
+         max_width=sidebar-18)
+    dy = top+round(span*.25)
+    text(canvas, 'DEPTH', sx+8, dy, .45, MUTED)
+    telemetry = snapshot['telemetry']
+    depth = '--' if telemetry is None else f"{telemetry['depth']:.2f}"
+    text(canvas, depth, sx+5, dy+48, 1.65 if height >= 650 else 1.35, FG, 2,
+         max_width=sidebar-44)
+    text(canvas, 'm', sx+sidebar-23, dy+48, .52, MUTED)
+    health_y = top+round(span*.52)
+    status(canvas, 'STATE', 'HEALTHY' if state_live else 'WAITING', sx+8,
+           health_y, state_live, sidebar-16)
+    status(canvas, 'CAMERA', badge, sx+8, health_y+31, camera_live, sidebar-16)
+    if height >= 650:
+        position_y = top+round(span*.70)
+        text(canvas, 'POSITION', sx+8, position_y, .40, MUTED)
+        text(canvas, '--' if telemetry is None else
+             f"{telemetry['x']:+.1f}, {telemetry['y']:+.1f} m", sx+8,
+             position_y+25, .50, FG, max_width=sidebar-16)
+        text(canvas, '--' if telemetry is None else
+             f"Heading {telemetry['heading']:+.1f} deg", sx+8,
+             position_y+49, .41, MUTED, max_width=sidebar-16)
+    elapsed = max(0, int(mission.get('mission_elapsed_s', 0.0)))
+    text(canvas, 'MISSION TIME', sx+8, bottom-40, .40, MUTED)
+    text(canvas, f'{elapsed//60:02d}:{elapsed%60:02d}', sx+8, bottom-10, .70, FG)
+
+    # A continuous rail, visibly status rather than seven clickable rectangles.
+    rail_y = height-43
+    centers = [margin+26+i*(width-2*margin-52)//6 for i in range(7)]
+    cv2.line(canvas, (centers[0], rail_y), (centers[-1], rail_y), PANEL, 2)
+    if current:
+        cv2.line(canvas, (centers[0], rail_y), (centers[current], rail_y), MUTED, 2)
+    for index, (stage, x) in enumerate(zip(PROGRESS_STAGES, centers)):
+        color = CYAN if index == current else MUTED if index < current else (78, 63, 49)
+        cv2.circle(canvas, (x, rail_y), 5 if index == current else 3, color, -1, cv2.LINE_AA)
+        font = .40 if width >= 900 else .31
+        tw = cv2.getTextSize(stage, cv2.FONT_HERSHEY_SIMPLEX, font, 1)[0][0]
+        text(canvas, stage, x-tw//2, rail_y+23, font, color)
     return canvas, {'camera_live': bool(camera_live), 'camera_fps_recent': fps,
                     'state_live': bool(state_live), 'mission_state': phase,
-                    'mission_status_live': bool(mission_fresh)}
+                    'mission_status_live': bool(mission_fresh), 'autonomy_status': autonomy,
+                    'progress_index': current, 'window_size': [width, height],
+                    'camera_rect': image_rect}
 
 
 def main(args=None):
@@ -246,7 +315,10 @@ def main(args=None):
     last_sequence, image, camera_error = -1, None, ''
     reported = last_evidence = 0.0
     try:
-        cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)
+        cv2.namedWindow(WINDOW, WINDOW_FLAGS)
+        window_size = (max(MINIMUM_SIZE[0], node.window_width),
+                       max(MINIMUM_SIZE[1], node.window_height))
+        cv2.resizeWindow(WINDOW, *window_size)
         while rclpy.ok():
             snapshot = node.snapshot()
             now = time.monotonic()
@@ -262,12 +334,18 @@ def main(args=None):
                 except ValueError as error:
                     camera_error = str(error)
             canvas, health = render(snapshot, image, now, node.get_clock().now().nanoseconds/1e9,
-                                    camera_error)
+                                    camera_error, size=window_size)
             cv2.imshow(WINDOW, canvas)
             if cv2.waitKey(25) & 0xff in (27, ord('q')):
                 break
             if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                 break
+            _, _, client_width, client_height = cv2.getWindowImageRect(WINDOW)
+            if client_width > 0 and client_height > 0:
+                window_size = (max(MINIMUM_SIZE[0], client_width),
+                               max(MINIMUM_SIZE[1], client_height))
+                if window_size != (client_width, client_height):
+                    cv2.resizeWindow(WINDOW, *window_size)
             if now-reported >= 5:
                 node.get_logger().info(
                     f"GUI {health['mission_state']}: camera {health['camera_fps_recent']:.1f} Hz, "
@@ -286,6 +364,7 @@ def main(args=None):
                         'max_display_gap': node.maximum_display_gap,
                         'camera_error': camera_error, 'screenshots': sorted(saved),
                     }, indent=2))
+                    cv2.imwrite(str(evidence/'latest.png'), canvas)
                     last_evidence = now
     except KeyboardInterrupt:
         pass

@@ -124,10 +124,10 @@ class MissionExecutive(Node):
 
         self.kp_yaw = 1.40
         self.kd_yaw = 0.20
-        self.max_yaw = 0.25
+        self.max_yaw = 0.60
 
-        self.max_surge = 0.55
-        self.min_surge = 0.15
+        self.max_surge = 0.80
+        self.min_surge = 0.20
 
         self.last_status = None
 
@@ -364,14 +364,8 @@ class MissionExecutive(Node):
             dx,
         )
 
-        # Girona convention:
-        #
-        # yaw = 0 and positive surge
-        # moves toward world -X.
-        desired_yaw = wrap_angle(
-            world_bearing
-            - math.pi
-        )
+        # Positive public surge propels body +X: point the bow at the waypoint.
+        desired_yaw = wrap_angle(world_bearing)
 
         yaw_error = wrap_angle(
             desired_yaw
@@ -398,7 +392,7 @@ class MissionExecutive(Node):
 
             surge = min(
                 self.max_surge,
-                0.10 * distance,
+                0.16 * distance,
             )
 
             if distance > 0.45:
@@ -411,6 +405,10 @@ class MissionExecutive(Node):
             else:
 
                 surge = 0.0
+
+        # Reserve differential yaw authority before the adapter mixes motors.
+        allowed_surge = max(0.0, 1.0 - abs(yaw_cmd))
+        surge = min(surge, allowed_surge)
 
         return (
             surge,

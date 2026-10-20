@@ -57,13 +57,13 @@ def test_demo_does_not_define_home_or_move_before_ready_and_armed():
         node.destroy_node()
 
 
-def test_baseline_start_and_command_gains_remain_unchanged():
+def test_baseline_start_depth_and_route_with_faster_surge():
     node = MissionExecutive()
     try:
         assert node.state == 'WAIT_FOR_STATE'
         node.odom_callback(odometry())
         assert node.state == 'DIVE'
-        assert node.heave_trim == 0.34 and node.max_surge == 0.55
+        assert node.heave_trim == 0.34 and node.max_surge == 0.80
         assert node.inspection_standoff == 1.5 and node.travel_distance == 20.0
     finally:
         node.destroy_node()

@@ -3,6 +3,7 @@
 from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
+import xml.etree.ElementTree as ET
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -18,9 +19,45 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
 from neptune_sim.perception_profile import write_performance_scenario
+from neptune_bringup.presentation import window_profile
+
+
+def _orient_demo_inspection(scenario):
+    """Face the installed Demo V0 travel direction (-X), leaving shared scenes intact."""
+    vehicle_path = ET.parse(scenario).find('include').get('file')
+    vehicle = ET.parse(vehicle_path)
+    # A rotation alone looks through the hull and shadows both lamp beams.
+    # Put the lens beyond the rear rotor envelope (minimum X = -0.95647 m).
+    for selector, x in (
+        ("sensor[@name='inspection_camera_optical_frame']", '-0.97'),
+        ("light[@name='InspectionLightPort']", '-0.91'),
+        ("light[@name='InspectionLightStarboard']", '-0.91'),
+    ):
+        origin = vehicle.find(f'robot/{selector}/origin')
+        origin.set('rpy', '1.5707963267948966 0.0 -1.5707963267948966')
+        xyz = origin.get('xyz').split()
+        xyz[0] = x
+        if selector.startswith('light'):
+            xyz[2] = '0.22'
+            vehicle.find(f'robot/{selector}/specs').set('illuminance', '1000.0')
+        origin.set('xyz', ' '.join(xyz))
+    vehicle.write(vehicle_path, encoding='utf-8', xml_declaration=True)
+
+
+def _remove_presentation_omni(scenario):
+    """Remove only the legacy display orb from the disposable presentation scene."""
+    vehicle_path = ET.parse(scenario).find('include').get('file')
+    vehicle = ET.parse(vehicle_path)
+    robot = vehicle.find('robot')
+    omni = robot.find("light[@name='Omni']")
+    if omni is not None:
+        robot.remove(omni)
+    vehicle.write(vehicle_path, encoding='utf-8', xml_declaration=True)
 
 
 def _start(context):
+    presentation = LaunchConfiguration('presentation').perform(context) == 'true'
+    profile = window_profile(presentation)
     data = Path(LaunchConfiguration('simulation_data').perform(context))
     if not data.is_dir():
         raise RuntimeError('simulation_data must point to the existing Stonefish Tests/Data directory')
@@ -33,6 +70,9 @@ def _start(context):
     temporary = TemporaryDirectory(prefix='neptune-demo-v0-')
     try:
         scenario = write_performance_scenario(get_package_share_directory('neptune_sim'), temporary.name)
+        _orient_demo_inspection(scenario)
+        if presentation:
+            _remove_presentation_omni(scenario)
     except Exception:
         temporary.cleanup()
         raise
@@ -43,7 +83,9 @@ def _start(context):
 
     nodes = [
         Node(package='stonefish_ros2', executable='stonefish_simulator',
-             arguments=[str(data), str(scenario), '100', '1280', '720', 'low'], output='screen'),
+             arguments=[str(data), str(scenario), '100',
+                        str(profile['stonefish'][0]), str(profile['stonefish'][1]), 'low'],
+             output='screen'),
         Node(package='neptune_vehicle', executable='stonefish_adapter',
              parameters=[{'motor_count': 7}], output='screen'),
         Node(package='neptune_state_estimation', executable='pressure_depth', output='screen'),
@@ -56,7 +98,9 @@ def _start(context):
     ]
     gui = Node(package='neptune_bringup', executable='demo_gui', output='screen',
                condition=IfCondition(LaunchConfiguration('gui')),
-               parameters=[{'evidence_directory': ParameterValue(
+               parameters=[{'window_width': profile['gui'][0],
+                            'window_height': profile['gui'][1],
+                            'evidence_directory': ParameterValue(
                    LaunchConfiguration('evidence_directory'), value_type=str)}])
     nodes.append(gui)
     actions = [RegisterEventHandler(OnShutdown(on_shutdown=[OpaqueFunction(function=cleanup)]))]
@@ -69,7 +113,8 @@ def _start(context):
     actions.extend([
         Node(package='tf2_ros', executable='static_transform_publisher',
              name='inspection_camera_mount_tf',
-             arguments=['--x', '0.82', '--y', '0', '--z', '0.20',
+             arguments=['--x', '-0.97', '--y', '0', '--z', '0.20',
+                        '--yaw', '3.141592653589793',
                         '--frame-id', 'base_link', '--child-frame-id', 'inspection_camera_link']),
         Node(package='tf2_ros', executable='static_transform_publisher',
              name='inspection_camera_optical_tf',
@@ -84,6 +129,7 @@ def generate_launch_description():
     """Preserve legacy launches; Demo V0 never includes inference or P5."""
     actions = [
         DeclareLaunchArgument('simulation_data'),
+        DeclareLaunchArgument('presentation', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('auto_start', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('gui', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('evidence_directory', default_value=''),

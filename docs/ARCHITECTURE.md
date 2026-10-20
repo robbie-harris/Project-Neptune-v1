@@ -1,122 +1,47 @@
-# Project Neptune Architecture
+# Architecture
 
-## Main Data Flow
+Neptune separates sensing, navigation state, mission decisions and actuator translation. The current backend is Stonefish; a future hardware backend must preserve the public contracts in [INTERFACES.md](INTERFACES.md).
 
-IMU / DVL / Depth
-        |
-        v
-State Estimation
-        |
-        +----------------------+
-                               |
-Camera / Sonar                 |
-      |                        |
-      v                        |
- Perception                    |
-      |                        |
-      v                        |
- Lightweight World Model <-----+
-      |
-      v
- Autonomy
- mission + planning + recovery
-      |
-      v
- Trajectory
-      |
-      v
- Controls
-      |
-      v
- Vehicle Setpoint
-      |
-      v
- Vehicle Interface
-      |
-  +---+---+
-  |       |
-Stonefish ArduSub
-  |       |
-Sim     Hardware
+```mermaid
+flowchart TD
+    SF[Stonefish / future hardware backend]
+    SF -->|pressure / IMU / DVL| SE[State estimation]
+    SE -->|/state/odometry| AU[Autonomy / mission executive]
+    CAM[Inspection camera] --> PER[Perception]
+    PER -. observations: future mission integration .-> AU
+    AU -->|/neptune/cmd_body| VEH[Vehicle adapter]
+    VEH -->|native actuator demands| SF
+    SF -. truth only .-> EVAL[Evaluation]
+    SE -. estimate metrics .-> EVAL
+    AU -->|mission status| GUI[Read-only GUI]
+    CAM --> GUI
+    SE --> GUI
+    BR[Bringup / readiness / presentation] -. composition .-> AU
+```
 
-Evaluation listens to all major modules but does not command the vehicle.
+Solid navigation/control arrows describe Demo V0's runtime data flow, not Python import dependencies. Perception-to-autonomy integration is deferred. Reusable `neptune_controls` nodes are alternative experimental controllers today; the mission calls guidance internally and does not import a controls layer between autonomy and the adapter.
 
-## Module Responsibilities
+## Boundaries
 
-### neptune_state_estimation
-Answers:
-Where is the vehicle and how is it moving?
+| Module | Responsibility |
+| --- | --- |
+| `neptune_state_estimation` | Sensor-derived canonical navigation state; current pressure/IMU/DVL dead reckoning, future operational ESKF. |
+| `neptune_autonomy` | Mission sequencing and guidance using estimated state; one normal body-command publisher. |
+| `neptune_vehicle` | Body-command semantics to backend-specific actuator mapping, including watchdog. |
+| `neptune_perception` | Image-space inspection observations and fusion; no actuator authority. |
+| `neptune_controls` | Reusable/experimental lower-level controllers, selected explicitly instead of mission command ownership. |
+| `neptune_sim` | Simulator scenes/assets, performance profile and opt-in sensor degradation. |
+| `neptune_bringup` | Composition, readiness, read-only GUI and presentation placement. |
+| `neptune_evaluation` | Offline/live metrics and truth comparison with no production feedback. |
+| `neptune_interfaces` | Reserved shared-definition directory; no current custom ROS definitions or package manifest. |
+| `neptune_world` | Reserved backend-independent world abstractions; no current package manifest. |
 
-Initial MVP:
-IMU + DVL + depth -> EKF
+## Actual dependencies and target layering
 
-Stage 0:
-Simulator ground truth -> canonical Neptune state interface
+Most modules communicate using standard ROS messages rather than importing one another. Bringup declares runtime dependencies on autonomy, state estimation, vehicle and sim, and imports the simulator's profile generator. State estimation and readiness currently use `stonefish_ros2/msg/DVL`; this simulator-specific message coupling is transport debt, not permission to consume simulator truth. The state-estimation manifest does not yet explicitly declare that DVL dependency; the provisioned Stonefish underlay currently supplies it. No dependency cleanup is part of this baseline freeze.
 
-### neptune_perception
-Answers:
-What does the vehicle currently see?
+The intended layering is shared interfaces supporting state estimation/perception, then autonomy, reusable control laws where appropriate, and the vehicle boundary. This is a design direction, **not a claim of current imports**. Sim/world/bringup provide infrastructure; evaluation observes without feeding truth into production algorithms. See [TEAM_CONTRACTS.md](TEAM_CONTRACTS.md) for change rules and tests.
 
-Initial sensors:
-- camera
-- imaging sonar later
+## Runtime safeguards
 
-Produces:
-- asset detections
-- obstacle observations
-
-### neptune_world
-Answers:
-What do we currently know about the environment and inspection target?
-
-Keep this lightweight.
-
-Initial representation:
-- asset identity / pose
-- obstacles
-- home position
-- inspection progress
-
-### neptune_autonomy
-Answers:
-What should the robot do next?
-
-Contains:
-- mission
-- planning
-- recovery
-
-Initial mission:
-Home -> Dive -> Transit -> Acquire -> Inspect -> Return
-
-### neptune_controls
-Answers:
-How should the vehicle move to follow the requested trajectory?
-
-Also contains target-relative tracking initially.
-
-### neptune_vehicle
-Converts Neptune vehicle-independent commands into simulator/autopilot-specific commands.
-
-This is the only module allowed to depend directly on:
-- Stonefish vehicle APIs
-- ArduSub
-- MAVROS
-- MAVLink
-- vendor APIs
-
-### neptune_sim
-Contains Neptune-specific simulation worlds, vehicle configuration, sensors, and launch configuration.
-
-### neptune_evaluation
-Measures:
-- mission success
-- inspection coverage
-- localization error
-- trajectory tracking error
-- target loss / recovery
-- completion time
-- collisions
-
-### neptune_bringup
-Launches the complete Neptune stack.
+Autonomy uses `/state/odometry` exclusively. Demo readiness checks finite sensor/state values, monotonic receipt freshness and exclusive publication ownership. The adapter zeros stale commands. The GUI is read-only for motion. P4/P5 are excluded from Demo V0. Safe presentation preserves a 1280×720 Stonefish window; rendering-driver stalls remain a known platform limitation rather than a navigation feature.
